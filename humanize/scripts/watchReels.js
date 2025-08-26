@@ -256,7 +256,11 @@ module.exports = {
       const dyUp = -Math.round(h * rFloat(0.82, 0.90));
 
       try {
-console.log('[DEBUG] Calling swipeNext with:', safe ? safe : 'no safe coords');
+        console.log('[DEBUG] Calling swipeNext with:', safe ? safe : 'no safe coords');
+        
+        // Add extra loading delay for slow connections
+        await sleep(rInt(1000, 3000)); // 1-3 seconds extra for slow internet
+        
         await swipeNext(page, {
           ...(safe ? { startX: safe.x, startY: safe.y } : {}),
           dyRangePx: [dyUp, dyUp],
@@ -265,9 +269,10 @@ console.log('[DEBUG] Calling swipeNext with:', safe ? safe : 'no safe coords');
           tremorPxRange: [0.2, 0.8],
           session: state._swipeSession,
         });
-console.log('[DEBUG] swipeNext finished');
-      } catch {
-        await sleep(rInt(200, 600));
+        console.log('[DEBUG] swipeNext finished');
+      } catch (error) {
+        console.log('[DEBUG] Swipe error:', error.message);
+        await sleep(rInt(2000, 5000)); // Longer delay on error for slow connections
       }
 
       state.reelsSeen++;
@@ -278,7 +283,14 @@ console.log('[DEBUG] swipeNext finished');
         state.likeP = Math.min(0.95, cfg.likeChanceBase * mood.likeMultiplier);
         var moodDwellMultiplier = mood.dwellMultiplier || 1.0;
         var moodName = mood.name || 'Default';
-      } catch { var moodDwellMultiplier = 1.0; var moodName = 'Default'; }
+        
+        // Always log mood info for debugging
+        console.log(`[Mood] ${moodName} (likeP:${state.likeP.toFixed(3)}, dwellMult:${moodDwellMultiplier.toFixed(2)})`);
+      } catch (error) { 
+        var moodDwellMultiplier = 1.0; 
+        var moodName = 'Default';
+        console.log(`[Mood] Error getting mood: ${error.message}, using Default`);
+      }
 
       // Heuristic: boost dwell and like chance for highly-liked reels
       let dwellBoost = 1;
@@ -307,7 +319,12 @@ console.log('[DEBUG] swipeNext finished');
         if (await maybePeekProfile(page)) state.peeks++;
       }
 
+      // Wait for content to load (important for slow connections)
       await sleep(rInt(cfg.betweenReelPauseMs[0], cfg.betweenReelPauseMs[1]));
+      
+      // Extra wait for slow internet connections
+      await sleep(rInt(2000, 4000)); // 2-4 seconds extra for slow connections
+      
       if ((now() - start) / 1000 >= runSeconds) break;
 
       const bucket = (() => {

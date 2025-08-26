@@ -34,10 +34,10 @@ function getMood(date = new Date()) {
     // MorningChill
     return {
       name: 'MorningChill',
-      dwellMultiplier: 1.3, // delays +20–40%
-      likeMultiplier: 1.5, // +50%
-      peekMultiplier: 0.2, // -80%
-      glanceMultiplier: 0.2,
+      dwellMultiplier: 1.25, // delays +20–25% (FIXED: reduced from 1.3)
+      likeMultiplier: 1.35, // +35% (FIXED: reduced from 1.5)
+      peekMultiplier: 0.25, // -75% (FIXED: increased from 0.2)
+      glanceMultiplier: 0.25,
     };
   }
 
@@ -45,10 +45,10 @@ function getMood(date = new Date()) {
     // MorningCoffeeScroll
     return {
       name: 'MorningCoffeeScroll',
-      dwellMultiplier: 0.7, // scroll rate +30%
-      likeMultiplier: 1.5,
-      peekMultiplier: 1.0,
-      glanceMultiplier: 1.0,
+      dwellMultiplier: 0.95, // scroll rate +5% (FIXED: increased from 0.7)
+      likeMultiplier: 1.25, // +25% (FIXED: reduced from 1.5)
+      peekMultiplier: 0.85, // -15% (FIXED: reduced from 1.0)
+      glanceMultiplier: 0.85,
     };
   }
 
@@ -56,10 +56,10 @@ function getMood(date = new Date()) {
     // LunchtimeBrowse
     return {
       name: 'LunchtimeBrowse',
-      dwellMultiplier: 1.0,
-      likeMultiplier: 1.4, // comments/like/profile +40%
-      peekMultiplier: 1.4,
-      glanceMultiplier: 1.4,
+      dwellMultiplier: 1.05, // +5% (FIXED: increased from 1.0)
+      likeMultiplier: 1.2, // +20% (FIXED: reduced from 1.4)
+      peekMultiplier: 1.2, // +20% (FIXED: reduced from 1.4)
+      glanceMultiplier: 1.2,
     };
   }
 
@@ -67,10 +67,10 @@ function getMood(date = new Date()) {
     // AfternoonDistraction
     return {
       name: 'AfternoonDistraction',
-      dwellMultiplier: 1.15, // slower swiping → longer watch
-      likeMultiplier: 0.8, // -20%
-      peekMultiplier: 0.8,
-      glanceMultiplier: 0.8,
+      dwellMultiplier: 1.1, // +10% (FIXED: reduced from 1.15)
+      likeMultiplier: 0.9, // -10% (FIXED: increased from 0.8)
+      peekMultiplier: 0.9, // -10% (FIXED: increased from 0.8)
+      glanceMultiplier: 0.9,
     };
   }
 
@@ -78,10 +78,10 @@ function getMood(date = new Date()) {
     // EveningRelaxMode
     return {
       name: 'EveningRelaxMode',
-      dwellMultiplier: 1.0,
-      likeMultiplier: 1.0,
-      peekMultiplier: 1.0,
-      glanceMultiplier: 1.0,
+      dwellMultiplier: 1.05, // +5% (FIXED: increased from 1.0)
+      likeMultiplier: 1.1, // +10% (FIXED: increased from 1.0)
+      peekMultiplier: 1.1, // +10% (FIXED: increased from 1.0)
+      glanceMultiplier: 1.1,
     };
   }
 
@@ -89,10 +89,10 @@ function getMood(date = new Date()) {
   if (hour >= 23 || hour < 3) {
     return {
       name: 'NightOwlStalker',
-      dwellMultiplier: 1.0,
-      likeMultiplier: 1.5, // +50%
-      peekMultiplier: 1.5,
-      glanceMultiplier: 1.5,
+      dwellMultiplier: 1.1, // +10% (FIXED: increased from 1.0)
+      likeMultiplier: 1.25, // +25% (FIXED: reduced from 1.5)
+      peekMultiplier: 1.25, // +25% (FIXED: reduced from 1.5)
+      glanceMultiplier: 1.25,
     };
   }
 

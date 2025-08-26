@@ -546,8 +546,17 @@ function isReactionEligible(slideDwell, totalDwell, wasPaused, wasReplayed, sess
 }
 
 function selectEmojiReaction(session) {
-  // Calculate mood-influenced 😂 chance (per client requirement)
-  const baseLaughChance = 0.80; // 80% base
+  // Handle null/undefined session
+  if (!session || !session.reelsMood || !session.storyMood) {
+    console.warn('[selectEmojiReaction] Invalid session, using default values');
+    session = {
+      reelsMood: { likeMultiplier: 1.0 },
+      storyMood: { emojiMultiplier: 1.0 }
+    };
+  }
+  
+  // Calculate mood-influenced 😂 chance (FIXED: balanced for human-like distribution)
+  const baseLaughChance = 0.65; // Increased from 55% to 65% for better balance
   
   // Get mood multipliers for emoji reactions
   const reelsEmojiMultiplier = session.reelsMood.likeMultiplier || 1.0;
@@ -556,11 +565,11 @@ function selectEmojiReaction(session) {
   // Combine mood influence (simple multiplication)
   const combinedMultiplier = reelsEmojiMultiplier * storyEmojiMultiplier;
   
-  // Apply mood influence to 😂 chance (can go up to 100% or down based on moods)
+  // Apply mood influence to 😂 chance (FIXED: cap at 70% maximum)
   let laughChance = baseLaughChance * combinedMultiplier;
   
-  // Clamp between 0% and 100%
-  laughChance = Math.max(0, Math.min(1, laughChance));
+  // Clamp between 35% and 75% (FIXED: better human-like range)
+  laughChance = Math.max(0.35, Math.min(0.75, laughChance));
   
   // Generate random number
   const roll = Math.random();
@@ -601,12 +610,12 @@ function selectEmojiReaction(session) {
 }
 
 function getEmojiDistributionInfo(session) {
-  // Calculate mood-influenced distribution for logging
-  const baseLaughChance = 0.80;
+  // Calculate mood-influenced distribution for logging (FIXED: match selectEmojiReaction)
+  const baseLaughChance = 0.65; // Increased from 55% to 65% base
   const reelsEmojiMultiplier = session.reelsMood.likeMultiplier || 1.0;
   const storyEmojiMultiplier = session.storyMood.emojiMultiplier || 1.0;
   const combinedMultiplier = reelsEmojiMultiplier * storyEmojiMultiplier;
-  const laughChance = Math.max(0, Math.min(1, baseLaughChance * combinedMultiplier));
+  const laughChance = Math.max(0.35, Math.min(0.75, baseLaughChance * combinedMultiplier));
   
   return {
     laughChance: (laughChance * 100).toFixed(1),
