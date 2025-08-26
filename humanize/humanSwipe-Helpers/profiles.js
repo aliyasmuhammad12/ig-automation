@@ -98,4 +98,32 @@ function profileOverrides(name) {
   }
 }
 
-module.exports = { profileOverrides };
+/**
+ * Get profile by name
+ */
+function getProfile(name) {
+  if (!name) return null;
+  
+  const overrides = profileOverrides(name);
+  if (!overrides || Object.keys(overrides).length === 0) return null;
+  
+  return {
+    name,
+    overrides,
+    getMultipliers: () => overrides
+  };
+}
+
+/**
+ * Get multipliers for a profile
+ */
+function getMultipliers(profileName) {
+  const profile = getProfile(profileName);
+  return profile ? profile.getMultipliers() : {};
+}
+
+module.exports = {
+  profileOverrides,
+  getProfile,
+  getMultipliers
+};

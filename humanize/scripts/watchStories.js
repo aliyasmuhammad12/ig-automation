@@ -907,25 +907,48 @@ async function navigateToStories(page) {
             }
           }
           
-          // If no unread stories found, use the first one
+          // If no unread stories found, try any story that's not "Your story"
+          if (!storyButton) {
+            for (let j = 0; j < storyElements.length; j++) {
+              const element = storyElements[j];
+              const isNotYourStory = await element.evaluate(el => {
+                const isYourStory = el.querySelector('img[alt*="profile" i]') && 
+                                  (el.textContent.includes('Your story') || 
+                                   el.getAttribute('aria-label')?.includes('Your story') ||
+                                   el.querySelector('div[data-testid="add-to-story"]'));
+                return !isYourStory;
+              });
+              
+              if (isNotYourStory) {
+                storyButton = element;
+                console.log(`[Stories] Using non-Your-story at index ${j}`);
+                break;
+              }
+            }
+          }
+          
+          // Last resort: use the first one if no better option found
           if (!storyButton && storyElements.length > 0) {
             storyButton = storyElements[0];
-            console.log(`[Stories] Using first available story`);
+            console.log(`[Stories] Using first available story (last resort)`);
           }
           
           if (storyButton) {
-          await touchTapHandle(page, storyButton);
-          await sleep(rInt(1000, 2000));
-          console.log(`[Stories] Clicked story element with selector: ${selector}`);
-          
-          // Handle privacy confirmation if it appears
-          const privacyHandled = await handlePrivacyConfirmation(page);
-          if (!privacyHandled) {
-            console.log(`[Stories] Failed to handle privacy confirmation`);
-            return false;
-          }
-          
-          return true;
+            await touchTapHandle(page, storyButton);
+            await sleep(rInt(1000, 2000));
+            console.log(`[Stories] Clicked story element with selector: ${selector}`);
+            
+            // Wait a bit and check if we successfully entered story view
+            await sleep(2000);
+            const isInStoryView = await isStoryActive(page);
+            
+            if (isInStoryView) {
+              console.log(`[Stories] Successfully entered story view`);
+              return true;
+            } else {
+              console.log(`[Stories] Failed to enter story view, trying next selector`);
+              continue; // Try next selector instead of returning false
+            }
           }
         }
       } catch (error) {
@@ -1035,6 +1058,7 @@ async function watchStories(page, durationSeconds = 60, accountId = 'unknown') {
   let currentAccountSlideIndices = []; // Track which specific slides to watch
   let currentSlideIndex = 0; // Track current position in story
   let consecutiveFailedTaps = 0; // Track failed tap attempts
+  let consecutiveNavigationFailures = 0; // Track navigation failures to prevent infinite loops
   
   while (sessionActive && now() < endTime) {
     try {
@@ -1058,15 +1082,31 @@ async function watchStories(page, durationSeconds = 60, accountId = 'unknown') {
       const storyActive = await isStoryActive(page);
       if (!storyActive) {
         session.log(`[Stories] Not in story view, attempting to navigate...`);
-        const navSuccess = await navigateToStories(page);
-        if (!navSuccess) {
-          session.setEndReason('No more stories available');
-          session.log(`[Stories] No more stories available, ending session`);
+        
+        // Prevent infinite loops by limiting navigation retries
+        consecutiveNavigationFailures++;
+        if (consecutiveNavigationFailures > 5) {
+          session.setEndReason('Too many navigation failures');
+          session.log(`[Stories] Too many navigation failures (${consecutiveNavigationFailures}), ending session`);
           break;
         }
+        
+        const navSuccess = await navigateToStories(page);
+        if (!navSuccess) {
+          session.log(`[Stories] Navigation failed (attempt ${consecutiveNavigationFailures}/5)`);
+          await sleep(rInt(2000, 4000)); // Wait longer before retry
+          continue;
+        } else {
+          // Reset failure counter on successful navigation
+          consecutiveNavigationFailures = 0;
+        }
+        
         await sleep(rInt(500, 1000));
         continue;
       }
+      
+      // Reset navigation failure counter when we're successfully in story view
+      consecutiveNavigationFailures = 0;
       
       // Get current story info
       const currentStoryInfo = await page.evaluate(() => {

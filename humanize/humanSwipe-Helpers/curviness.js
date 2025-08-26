@@ -1,5 +1,6 @@
 // curviness.js — meta‑aware
 const { rInt, rFloat, clamp } = require('./utils');
+const DEFAULTS = require('./params');
 
 function startCurvinessOverride(session, scale, swipes) {
   session.curvinessOverride = { scale, until: session.swipeCount + swipes };
@@ -58,10 +59,42 @@ function currentCurviness(session, cfg, DEFAULTS) {
   return clamp(chosen * metaMul, minAllowed, maxAllowed);
 }
 
+/**
+ * Compute curviness for a swipe
+ */
+function computeCurviness(opts) {
+  const { sessionState, lateralInfo, profileMultipliers } = opts;
+  
+  // Expire curviness override if done
+  expireCurvinessIfDone(sessionState);
+  
+  // Maybe start new curviness burst
+  maybeStartCurvinessBurstOnShift(sessionState, DEFAULTS);
+  
+  // Compute current curviness
+  const curvinessScale = currentCurviness(sessionState, {}, DEFAULTS);
+  
+  // Apply profile multipliers
+  const profileCurvinessMul = profileMultipliers.curvinessMul || 1.0;
+  
+  // Apply outlier if it's a curvy surge
+  let finalCurviness = curvinessScale * profileCurvinessMul;
+  if (sessionState.lastOutlierType === 'curvySurge') {
+    const surgeRange = [1.5, 2.1]; // From DEFAULTS
+    finalCurviness *= rFloat(surgeRange[0], surgeRange[1]);
+  }
+  
+  return {
+    scale: finalCurviness,
+    arcMul: lateralInfo.arcPx * finalCurviness
+  };
+}
+
 module.exports = {
   startCurvinessOverride,
   expireCurvinessIfDone,
   maybeStartCurvinessBurstOnShift,
   maybeStartFlatSessionOnInit,
-  currentCurviness
+  currentCurviness,
+  computeCurviness
 };

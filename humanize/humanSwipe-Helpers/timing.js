@@ -22,7 +22,8 @@
 //   const delays = buildTiming(cfg, DEFAULTS, stepsN, totalMs, [jMin, jMax], OUT);
 //   for (let i = 0; i < stepsN; i++) steps[i].delayMs = delays[i];
 
-const { rInt } = require('./utils');
+const { rInt, rFloat } = require('./utils');
+const DEFAULTS = require('./params');
 
 // ---- helpers ----------------------------------------------------------------
 function coalesce(...vals) {
@@ -86,4 +87,89 @@ function buildTiming(cfg = {}, DEFAULTS = {}, stepsN = 0, baseTotalMs = 0, jitte
   return delays;
 }
 
-module.exports = { buildTiming };
+/**
+ * Compute timing for a swipe
+ */
+function computeTiming(opts) {
+  const { sessionState, profileMultipliers, forceOutlier } = opts;
+  
+  // Get base duration from session state or defaults
+  let duration = 400; // Default duration
+  
+  // Apply profile multipliers
+  if (profileMultipliers.durationBuckets) {
+    // Use profile-specific duration buckets
+    const bucket = profileMultipliers.durationBuckets[0]; // Use first bucket for now
+    duration = rFloat(bucket.v[0], bucket.v[1]);
+  } else {
+    // Use default duration buckets
+    const durBuckets = DEFAULTS.durBuckets;
+    const bucket = durBuckets[Math.floor(Math.random() * durBuckets.length)];
+    duration = rFloat(bucket.range[0], bucket.range[1]);
+  }
+  
+  // Apply outlier if forced
+  if (forceOutlier === 'longPause') {
+    const pauseRange = DEFAULTS.outlierLongPauseMs;
+    const pauseMs = rFloat(pauseRange[0], pauseRange[1]);
+    return {
+      duration: duration + pauseMs,
+      type: 'longPause',
+      pauseMs: pauseMs
+    };
+  }
+  
+  return {
+    duration: duration,
+    type: null
+  };
+}
+
+/**
+ * Compute step delay for a specific step
+ */
+function computeStepDelay(opts) {
+  const { index, totalSteps, baseDelay, timingInfo, sessionState } = opts;
+  
+  // Base delay from frame rate
+  let stepDelay = baseDelay;
+  
+  // Apply micro-jitter
+  const microJitterChance = DEFAULTS.framePacing.microJitterChance;
+  const microJitterMaxMs = DEFAULTS.framePacing.microJitterMaxMs;
+  
+  if (Math.random() < microJitterChance) {
+    const jitter = rFloat(-microJitterMaxMs, microJitterMaxMs);
+    stepDelay += jitter;
+  }
+  
+  // Apply drop frame simulation
+  const dropFrameChance = DEFAULTS.framePacing.dropFrameChance;
+  if (Math.random() < dropFrameChance) {
+    stepDelay += baseDelay; // Skip one frame
+  }
+  
+  return Math.max(1, stepDelay); // Ensure minimum 1ms delay
+}
+
+/**
+ * Apply micro-jitter to a delay
+ */
+function applyMicroJitter(delay, sessionState) {
+  const microJitterChance = DEFAULTS.framePacing.microJitterChance;
+  const microJitterMaxMs = DEFAULTS.framePacing.microJitterMaxMs;
+  
+  if (Math.random() < microJitterChance) {
+    const jitter = rFloat(-microJitterMaxMs, microJitterMaxMs);
+    return Math.max(1, delay + jitter);
+  }
+  
+  return delay;
+}
+
+module.exports = { 
+  buildTiming,
+  computeTiming,
+  computeStepDelay,
+  applyMicroJitter
+};

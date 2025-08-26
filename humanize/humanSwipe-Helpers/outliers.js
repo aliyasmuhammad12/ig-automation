@@ -25,6 +25,19 @@
 //   }
 
 const { rInt, rFloat } = require('./utils');
+const DEFAULTS = require('./params');
+
+/**
+ * Helper function to coalesce values
+ */
+function coalesce(...vals) {
+  const fallback = vals.length ? vals[vals.length - 1] : undefined;
+  for (let i = 0; i < vals.length - 1; i++) {
+    const v = vals[i];
+    if (v !== undefined && v !== null) return v;
+  }
+  return fallback;
+}
 
 /**
  * Weighted random pick for objects like [{type:'a', w:2}, {type:'b', w:1}]
@@ -100,14 +113,42 @@ function selectOutlier(cfg = {}, DEFAULTS = {}, stepsN = 0) {
   return { type, pauseIdx, pauseMs, spikeIdx, spikePx, curvyMul };
 }
 
-/** Small helper: first non-undefined/null value, else fallback */
-function coalesce(...vals) {
-  const fallback = vals.length ? vals[vals.length - 1] : undefined;
-  for (let i = 0; i < vals.length - 1; i++) {
-    const v = vals[i];
-    if (v !== undefined && v !== null) return v;
+/**
+ * Check for outlier based on session state and profile multipliers
+ */
+function checkForOutlier(opts) {
+  const { sessionState, forceOutlier, profileMultipliers } = opts;
+  
+  // If forced outlier, return it
+  if (forceOutlier) {
+    const outlierInfo = selectOutlier({}, DEFAULTS, 15); // Default 15 steps
+    outlierInfo.type = forceOutlier;
+    return outlierInfo;
   }
-  return fallback;
+  
+  // Check for natural outlier based on session state
+  const outlierChance = DEFAULTS.outlierChance;
+  const outlierWeights = DEFAULTS.outlierWeights;
+  
+  // Apply profile multipliers
+  const profileOutlierChance = profileMultipliers.outlierChance || 1.0;
+  const finalOutlierChance = outlierChance * profileOutlierChance;
+  
+  if (Math.random() < finalOutlierChance) {
+    return selectOutlier({}, DEFAULTS, 15); // Default 15 steps
+  }
+  
+  return {
+    type: null,
+    pauseIdx: null,
+    pauseMs: 0,
+    spikeIdx: null,
+    spikePx: 0,
+    curvyMul: 1
+  };
 }
 
-module.exports = { selectOutlier };
+module.exports = {
+  selectOutlier,
+  checkForOutlier
+};

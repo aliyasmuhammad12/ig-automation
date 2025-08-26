@@ -1,5 +1,6 @@
 const { delay } = require('../helpers/utils');
 const config = require('../config');
+const { UsernameTypingSimulator } = require('../humanize/scripts/usernameTypingSimulator');
 
 async function clickSearchIcon(page) {
   const anchorSel = 'a[href="/explore/"]';
@@ -89,22 +90,46 @@ async function searchAndOpenProfile(page, username) {
       console.log(`[searchAndOpenProfile] Attempt ${attempt + 1}`);
       const ok = await clickSearchIcon(page);
       if (!ok) throw new Error("Could not click search icon");
-
+      
       const inputSel = await findSearchInputSelector(page);
       if (!inputSel) throw new Error('Search input not found');
 
       await clearSearchBar(page, inputSel);
       await delay(500);
-      await page.type(inputSel, cleanUsername);
+      
+      // Use human-like typing simulator instead of robotic typing
+      const typingSimulator = new UsernameTypingSimulator({
+        persona: 'auto', // Random persona selection
+        deviceProfile: 'desktop',
+        deactivateOnUserInput: true,
+        maxRuntime: 15000 // 15 seconds max
+      });
+      
+      const typingResult = await typingSimulator.typeUsername(page, inputSel, cleanUsername);
+      
+      if (!typingResult.success) {
+        console.log(`[searchAndOpenProfile] ⚠️ Typing failed: ${typingResult.reason}, trying alternative method...`);
+        // Fallback to regular typing if simulator fails
+        console.log(`[searchAndOpenProfile] 🔄 Retry typed value: "${cleanUsername}"`);
+        await page.type(inputSel, cleanUsername);
+      }
+      
+      // Verify what was typed
+      const typedValue = await page.evaluate((sel) => {
+        const input = document.querySelector(sel);
+        return input ? input.value : '';
+      }, inputSel);
+      console.log(`[searchAndOpenProfile] 🔍 Typed value: "${typedValue}"`);
+      
       await delay(3000);
-
+      
       const profileSelector = `li a[href="/${cleanUsername}/"]`;
       await page.waitForSelector(profileSelector, { visible: true, timeout: 10000 });
 
       await page.$eval(profileSelector, el => {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        el.click();
-      });
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.click();
+        });
 
       await delay(5000);
       return true;
@@ -117,12 +142,12 @@ async function searchAndOpenProfile(page, username) {
 
           const homeSelector = 'a[href="/"][role="link"]';
 
-await page.waitForSelector(homeSelector, { visible: true, timeout: 10000 });
-await page.$eval(homeSelector, el => {
-  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  el.click();
-});
-await delay(3000);
+          await page.waitForSelector(homeSelector, { visible: true, timeout: 10000 });
+          await page.$eval(homeSelector, el => {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.click();
+          });
+          await delay(3000);
 
 
           await clickSearchIcon(page);

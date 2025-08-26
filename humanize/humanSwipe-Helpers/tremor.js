@@ -1,5 +1,5 @@
 // tremor.js
-// Responsibility: produce tiny, smooth, human-like jitter (aka “tremor”)
+// Responsibility: produce tiny, smooth, human-like jitter (aka "tremor")
 // to be added on top of the geometric swipe path per step.
 //
 // Design
@@ -35,6 +35,7 @@
 //   }
 
 const { rFloat } = require('./utils');
+const DEFAULTS = require('./params');
 
 // ---- small internal helpers ----
 function coalesce(...vals) {
@@ -99,52 +100,66 @@ function createTremor(cfg = {}, DEFAULTS = {}, stepsN = 0) {
   const ampXCap = rFloat(ampXMin, ampXMax) * shortMul;
   const ampYCap = rFloat(ampYMin, ampYMax) * shortMul;
 
-  // Init state: pos (tx, ty) and vel (vx, vy)
-  let tx = rFloat(-ampXCap * 0.1, ampXCap * 0.1);
-  let ty = rFloat(-ampYCap * 0.1, ampYCap * 0.1);
-  let vx = 0, vy = 0;
+  // State for the returned function
+  let vx = 0, vy = 0; // velocity
+  let px = 0, py = 0; // position
 
-  // Random phase multipliers so x/y don't sync
-  const phaseX = rFloat(0.75, 1.25);
-  const phaseY = rFloat(0.75, 1.25);
+  return function tremorStep(i, opts = {}) {
+    // Warmup: reduce amplitude for first few steps
+    const warmupMul = i <= warmupSteps ? 0.4 : 1.0;
 
-  // The per-step function
-  return function tremorStep(i = 1, opts = {}) {
-    // Optional per-call overrides
-    const ampScale = typeof opts.ampScale === 'number' ? opts.ampScale : 1;
+    // Random nudge
+    const nudge = rFloat(nudgeMin, nudgeMax);
+    const nudgeX = (Math.random() - 0.5) * nudge;
+    const nudgeY = (Math.random() - 0.5) * nudge;
 
-    // Warmup scaling: ramp from 60% -> 100% over warmupSteps
-    const warmupScale = warmupSteps > 0
-      ? clamp(0.6 + 0.4 * Math.min(1, i / warmupSteps), 0.6, 1.0)
-      : 1.0;
+    // Update velocity (add nudge, apply drag)
+    vx = vx * drag + nudgeX + biasX;
+    vy = vy * drag + nudgeY + biasY;
 
-    const axCap = ampXCap * ampScale * warmupScale;
-    const ayCap = ampYCap * ampScale * warmupScale;
+    // Update position (add velocity, ease toward center)
+    px += vx;
+    py += vy;
+    px *= (1 - ease);
+    py *= (1 - ease);
 
-    // Random nudges (acceleration), independently for x and y
-    const nudgeX = rFloat(nudgeMin, nudgeMax) * (Math.random() < 0.5 ? -1 : 1);
-    const nudgeY = rFloat(nudgeMin, nudgeMax) * (Math.random() < 0.5 ? -1 : 1);
-
-    // Spring to center (ease) + random nudge + tiny bias
-    vx = vx * drag + (-tx * ease) + nudgeX * phaseX + biasX * 0.02;
-    vy = vy * drag + (-ty * ease) + nudgeY * phaseY + biasY * 0.02;
-
-    // Integrate
-    tx += vx;
-    ty += vy;
-
-    // Soft-limit to caps (squash as approach edge)
-    const overX = Math.abs(tx) / (axCap || 1);
-    const overY = Math.abs(ty) / (ayCap || 1);
-    if (overX > 1) tx *= 0.8 + 0.2 / overX;
-    if (overY > 1) ty *= 0.8 + 0.2 / overY;
-
-    // Final clamp
-    tx = clamp(tx, -axCap, axCap);
-    ty = clamp(ty, -ayCap, ayCap);
+    // Clamp to amplitude caps
+    const tx = clamp(px * warmupMul, -ampXCap, ampXCap);
+    const ty = clamp(py * warmupMul, -ampYCap, ampYCap);
 
     return { tx, ty };
   };
 }
 
-module.exports = { createTremor };
+/**
+ * Apply tremor to a path
+ */
+function applyTremor(opts) {
+  const { path, sessionState, profileMultipliers } = opts;
+  
+  // Create tremor generator
+  const tremorStep = createTremor({}, DEFAULTS, path.length);
+  
+  // Apply tremor to each point
+  const trembledPath = path.map((point, index) => {
+    const { tx, ty } = tremorStep(index + 1);
+    
+    // Apply profile multipliers
+    const tremorMul = profileMultipliers.tremorMul || 1.0;
+    
+    return {
+      x: point.x + (tx * tremorMul),
+      y: point.y + (ty * tremorMul)
+    };
+  });
+  
+  return {
+    path: trembledPath,
+    applied: true
+  };
+}
+
+module.exports = {
+  createTremor,
+  applyTremor
+};

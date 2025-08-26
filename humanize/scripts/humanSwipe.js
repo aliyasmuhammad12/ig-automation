@@ -1,19 +1,30 @@
 // humanize/scripts/humanSwipe.js
+// Advanced human-like swipe with full integration of all helper modules
 // Export: { swipeNext(page, options) }
 
-const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
-const rFloat = (a, b) => a + Math.random() * (b - a);
-const rInt = (a, b) => Math.floor(rFloat(a, b + 1));
-const lerp = (a, b, t) => a + (b - a) * t;
+const DEFAULTS = require('../humanSwipe-Helpers/params');
+const session = require('../humanSwipe-Helpers/session');
+const path = require('../humanSwipe-Helpers/path');
+const timing = require('../humanSwipe-Helpers/timing');
+const tremor = require('../humanSwipe-Helpers/tremor');
+const outliers = require('../humanSwipe-Helpers/outliers');
+const lateral = require('../humanSwipe-Helpers/lateral');
+const curviness = require('../humanSwipe-Helpers/curviness');
+const grip = require('../humanSwipe-Helpers/grip');
+const profiles = require('../humanSwipe-Helpers/profiles');
+const touch = require('../humanSwipe-Helpers/touch');
+const humanPlay = require('../humanSwipe-Helpers/humanPlay');
 
-// Small easing so the flick starts fast and eases out
-function easeOutExpo(t) {
-  return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+const { clamp, rFloat, rInt, lerp } = require('../humanSwipe-Helpers/utils');
+
+// Initialize session if not already done
+if (!session.inited) {
+  session.resetSession();
 }
 
 async function withCDP(page, fn) {
   const client = await page.target().createCDPSession();
-  // Ensure touch is truly “mobile-like”
+  // Ensure touch is truly "mobile-like"
   await client.send('Emulation.setTouchEmulationEnabled', {
     enabled: true,
     maxTouchPoints: 1,
@@ -25,86 +36,177 @@ async function withCDP(page, fn) {
   }
 }
 
-// Build a curved, slightly noisy path
-function buildPath(opts) {
+/**
+ * Build advanced human-like swipe path with all features
+ */
+function buildAdvancedPath(opts) {
   const {
     vw, vh,
     startX, startY,
-    dyRangePx = [-Math.round((vh || 640) * 0.85), -Math.round((vh || 640) * 0.85)],
-    stepsRange = [12, 18],
-    durationRangeMs = [240, 420],
-    tremorPxRange = [0.2, 0.8],
-    lateralDriftPx = [ -6, 6 ],
+    sessionState = session,
+    profileName = null,
+    forceOutlier = null
   } = opts;
 
-  const steps = rInt(stepsRange[0], stepsRange[1]);
-  const duration = rInt(durationRangeMs[0], durationRangeMs[1]);
-  const tremorMin = tremorPxRange[0], tremorMax = tremorPxRange[1];
+  // Update session state
+  sessionState.swipeCount++;
+  
+  // Apply persona/profile adjustments
+  const profile = profileName ? profiles.getProfile(profileName) : null;
+  const profileMultipliers = profile ? profile.getMultipliers() : {};
 
-  const dy = rInt(dyRangePx[0], dyRangePx[1]);
-  const endX = clamp(startX + rInt(lateralDriftPx[0], lateralDriftPx[1]), 8, vw - 8);
-  const endYRaw = startY + dy;
-
-  // Don’t let endY go off-screen; IG often ignores off-screen end points
-  const endY = clamp(endYRaw, Math.round(vh * 0.08), vh - 12);
-
-  const path = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = easeOutExpo(i / steps);
-    let x = lerp(startX, endX, t);
-    let y = lerp(startY, endY, t);
-
-    // Gentle tremor
-    x += rFloat(-tremorMax, tremorMax);
-    y += rFloat(-tremorMax, tremorMax);
-
-    // Final clamp to viewport
-    x = clamp(Math.round(x), 2, vw - 2);
-    y = clamp(Math.round(y), 2, vh - 2);
-
-    path.push({ x, y });
-  }
-  return { path, duration };
-}
-
-async function dispatchSwipe(client, path, durationMs) {
-  if (!path.length) return;
-  const id = 1;
-
-  // TouchStart
-  await client.send('Input.dispatchTouchEvent', {
-    type: 'touchStart',
-    touchPoints: [{ x: path[0].x, y: path[0].y, radiusX: 1, radiusY: 1, rotationAngle: 0, force: 0.85, id }],
-    modifiers: 0,
+  // Determine grip mode and start point
+  const gripInfo = grip.computeGripMode(sessionState);
+  const startPoint = grip.computeStartPoint({
+    vw, vh, startX, startY,
+    gripMode: gripInfo.mode,
+    sessionState
   });
 
-  // Moves
+  // Compute lateral geometry with advanced features
+  const lateralInfo = lateral.computeLateralGeometry({
+    sessionState,
+    profileMultipliers,
+    forceOutlier
+  });
+
+  // Compute path geometry with curviness
+  const curvinessInfo = curviness.computeCurviness({
+    sessionState,
+    lateralInfo,
+    profileMultipliers
+  });
+
+  // Compute timing with cadence control
+  const timingInfo = timing.computeTiming({
+    sessionState,
+    profileMultipliers,
+    forceOutlier
+  });
+
+  // Check for outliers
+  const outlierInfo = outliers.checkForOutlier({
+    sessionState,
+    forceOutlier,
+    profileMultipliers
+  });
+
+  // Build the actual path
+  const pathInfo = path.buildPath({
+    startPoint,
+    lateralInfo,
+    curvinessInfo,
+    timingInfo,
+    outlierInfo,
+    sessionState,
+    vw, vh
+  });
+
+  // Apply tremor
+  const tremorInfo = tremor.applyTremor({
+    path: pathInfo.path,
+    sessionState,
+    profileMultipliers
+  });
+
+  // Update session with this swipe's characteristics
+  sessionState.lastDur = timingInfo.duration;
+  sessionState.lastDrift = lateralInfo.driftPx;
+  sessionState.lastDy = pathInfo.dy;
+  sessionState.lastStartX = startPoint.x;
+  sessionState.lastStartY = startPoint.y;
+  sessionState.lastOutlierType = outlierInfo.type;
+
+  // Advance meta-drift
+  sessionState.maybeDriftMeta();
+
+  return {
+    path: tremorInfo.path,
+    duration: timingInfo.duration,
+    startPoint,
+    lateralInfo,
+    curvinessInfo,
+    timingInfo,
+    outlierInfo,
+    tremorInfo,
+    gripInfo
+  };
+}
+
+/**
+ * Dispatch swipe with advanced timing and touch simulation
+ */
+async function dispatchAdvancedSwipe(client, pathInfo, sessionState) {
+  const { path, duration, timingInfo } = pathInfo;
+  if (!path.length) return;
+
+  const id = 1;
+  const frameDelay = 1000 / sessionState.targetHz; // Convert Hz to ms
+
+  // TouchStart with proper timing
+  const startTimestamp = Date.now();
+  await client.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{
+      x: path[0].x, y: path[0].y,
+      radiusX: 1, radiusY: 1,
+      rotationAngle: 0,
+      force: 0.85,
+      id
+    }],
+    modifiers: 0,
+    timestamp: startTimestamp
+  });
+
+  // Moves with cadence control and micro-jitter
   const moves = path.slice(1, -1);
-  const perStepDelay = Math.max(6, Math.round(durationMs / Math.max(2, moves.length)));
-  for (const p of moves) {
+  for (let i = 0; i < moves.length; i++) {
+    const p = moves[i];
+    const stepDelay = timing.computeStepDelay({
+      index: i,
+      totalSteps: moves.length,
+      baseDelay: frameDelay,
+      timingInfo,
+      sessionState
+    });
+
+    // Apply micro-jitter
+    const jitteredDelay = timing.applyMicroJitter(stepDelay, sessionState);
+
     await client.send('Input.dispatchTouchEvent', {
       type: 'touchMove',
-      touchPoints: [{ x: p.x, y: p.y, radiusX: 1, radiusY: 1, rotationAngle: 0, force: 0.75, id }],
+      touchPoints: [{
+        x: p.x, y: p.y,
+        radiusX: 1, radiusY: 1,
+        rotationAngle: 0,
+        force: humanPlay.computeForce(i, moves.length),
+        id
+      }],
       modifiers: 0,
+      timestamp: startTimestamp + (i + 1) * frameDelay
     });
-    // micro-delay between moves; keep it short so it feels like a flick
-    await new Promise(r => setTimeout(r, perStepDelay));
+
+    // Wait with proper cadence
+    await new Promise(r => setTimeout(r, jitteredDelay));
   }
 
   // TouchEnd
-  const last = path[path.length - 1];
+  const endTimestamp = startTimestamp + duration;
   await client.send('Input.dispatchTouchEvent', {
     type: 'touchEnd',
-    touchPoints: [], // end ends with empty list
+    touchPoints: [],
     modifiers: 0,
+    timestamp: endTimestamp
   });
 }
 
 /**
- * swipeNext(page, options)
+ * Main swipe function with full feature integration
  * options:
- *  - startX, startY : optional start point; if missing, uses 52% x, 74% y of reel/video box or viewport
- *  - dyRangePx, stepsRange, durationRangeMs, tremorPxRange, session : optional shaping
+ *  - startX, startY : optional start point
+ *  - profileName : persona/profile name (e.g., 'bored', 'focused', 'distracted')
+ *  - forceOutlier : force specific outlier type
+ *  - sessionOverride : override session parameters
  */
 async function swipeNext(page, options = {}) {
   // Derive viewport
@@ -112,7 +214,7 @@ async function swipeNext(page, options = {}) {
   const vw = vp.width || 360;
   const vh = vp.height || 640;
 
-  // Try to start over the video region if possible (safer on IG)
+  // Try to start over the video region if possible
   let startX = options.startX, startY = options.startY;
   if (typeof startX !== 'number' || typeof startY !== 'number') {
     try {
@@ -134,22 +236,28 @@ async function swipeNext(page, options = {}) {
     }
   }
 
-  // Final clamp for start point (avoid nav bars/edges)
-  startX = clamp(Math.round(startX), 8, vw - 8);
-  startY = clamp(Math.round(startY), Math.round(vh * 0.12), vh - 24);
+  // Apply session overrides if provided
+  if (options.sessionOverride) {
+    Object.assign(session, options.sessionOverride);
+  }
 
-  const { path, duration } = buildPath({
+  // Set current profile if specified
+  if (options.profileName) {
+    session.currentProfileName = options.profileName;
+  }
+
+  // Build advanced path with all features
+  const pathInfo = buildAdvancedPath({
     vw, vh,
     startX, startY,
-    dyRangePx: options.dyRangePx,
-    stepsRange: options.stepsRange,
-    durationRangeMs: options.durationRangeMs,
-    tremorPxRange: options.tremorPxRange,
+    sessionState: session,
+    profileName: options.profileName,
+    forceOutlier: options.forceOutlier
   });
 
   // Run with CDP
   return withCDP(page, async (client) => {
-    // Bring page to front & ensure focus helps IG accept the gesture
+    // Bring page to front & ensure focus
     try { await client.send('Page.bringToFront'); } catch {}
     try {
       await page.evaluate(() => {
@@ -158,8 +266,14 @@ async function swipeNext(page, options = {}) {
       });
     } catch {}
 
-    await dispatchSwipe(client, path, duration);
+    await dispatchAdvancedSwipe(client, pathInfo, session);
   });
 }
 
-module.exports = { swipeNext };
+// Export the main function and session for external access
+module.exports = { 
+  swipeNext,
+  session, // Allow external access to session state
+  resetSession: () => session.resetSession(),
+  setProfile: (name) => { session.currentProfileName = name; }
+};

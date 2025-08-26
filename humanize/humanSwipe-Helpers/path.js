@@ -14,7 +14,7 @@
 //
 // Each step: { x: number, y: number, delayMs: number }
 
-const { rInt, rFloat } = require('./utils');
+const { rInt, rFloat, clamp, lerp } = require('./utils');
 const { selectOutlier } = require('./outliers');
 const { createLateral } = require('./lateral');
 const { createTremor } = require('./tremor');
@@ -99,7 +99,7 @@ function buildSwipePath(cfg = {}, meta = {}) {
     steps.push({ x, y, delayMs: 0 });
   }
 
-  // 8) Timing array
+  // 8) Apply timing
   const delays = buildTiming(cfg, DEFAULTS, stepsN, totalMs, jitterRangeMs, OUT);
   for (let i = 0; i < stepsN; i++) {
     steps[i].delayMs = delays[i];
@@ -108,4 +108,65 @@ function buildSwipePath(cfg = {}, meta = {}) {
   return steps;
 }
 
-module.exports = { buildSwipePath };
+/**
+ * Build path for a swipe with all advanced features
+ */
+function buildPath(opts) {
+  const { 
+    startPoint, 
+    lateralInfo, 
+    curvinessInfo, 
+    timingInfo, 
+    outlierInfo, 
+    sessionState, 
+    vw, 
+    vh 
+  } = opts;
+  
+  // Calculate end point based on lateral drift
+  const endX = clamp(startPoint.x + lateralInfo.driftPx, 8, vw - 8);
+  const endY = clamp(startPoint.y - DEFAULTS.dyBasePx, Math.round(vh * 0.08), vh - 12);
+  
+  // Calculate number of steps
+  const stepsN = rInt(12, 18); // Default step range
+  
+  // Build the path
+  const path = [];
+  for (let i = 0; i <= stepsN; i++) {
+    const t = i / stepsN;
+    
+    // Linear interpolation with easing
+    const easedT = t === 1 ? 1 : 1 - Math.pow(2, -10 * t); // easeOutExpo
+    
+    let x = lerp(startPoint.x, endX, easedT);
+    let y = lerp(startPoint.y, endY, easedT);
+    
+    // Apply curviness
+    if (curvinessInfo.arcMul > 0) {
+      const arcOffset = Math.sin(t * Math.PI) * curvinessInfo.arcMul;
+      x += arcOffset;
+    }
+    
+    // Apply outlier lateral spike
+    if (outlierInfo.type === 'lateralSpike' && i === outlierInfo.spikeIdx) {
+      x += outlierInfo.spikePx;
+    }
+    
+    // Final clamp to viewport
+    x = clamp(Math.round(x), 2, vw - 2);
+    y = clamp(Math.round(y), 2, vh - 2);
+    
+    path.push({ x, y });
+  }
+  
+  return {
+    path,
+    dy: endY - startPoint.y,
+    duration: timingInfo.duration
+  };
+}
+
+module.exports = {
+  buildSwipePath,
+  buildPath
+};
