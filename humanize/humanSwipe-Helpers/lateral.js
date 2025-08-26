@@ -215,4 +215,35 @@ function createLateral(cfg = {}, DEFAULTS = {}, meta = {}, dx = 0, dy = 0, steps
   };
 }
 
-module.exports = { createLateral };
+/**
+ * Compute lateral geometry for a swipe
+ */
+function computeLateralGeometry(opts) {
+  const { sessionState, profileMultipliers, forceOutlier } = opts;
+  
+  // Get drift parameters
+  const driftPx = sessionState.lateralDriftMeanPx + (profileMultipliers.lateralDriftMeanPx || 0);
+  const arcPx = sessionState.lateralArcMeanPx + (profileMultipliers.lateralArcMeanPx || 0);
+  
+  // Apply outlier if forced
+  if (forceOutlier === 'lateralSpike') {
+    const spikeRange = [12, 28]; // From DEFAULTS
+    const spikePx = rFloat(spikeRange[0], spikeRange[1]);
+    return {
+      driftPx: driftPx + spikePx,
+      arcPx: arcPx,
+      type: 'lateralSpike'
+    };
+  }
+  
+  return {
+    driftPx: driftPx,
+    arcPx: arcPx,
+    type: null
+  };
+}
+
+module.exports = {
+  createLateral,
+  computeLateralGeometry
+};

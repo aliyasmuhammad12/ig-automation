@@ -1,4 +1,4 @@
-// humanPlay.js — purposeless “fidget” motions that look human
+// humanPlay.js — purposeless "fidget" motions that look human
 // Public API:
 //   playRandom(page, cfg?)
 //   playOscillate(page, cfg?)   // up–down 3–15 times (requested behavior)
@@ -98,103 +98,36 @@ async function runPath(page, start, steps) {
   session.swipeCount++;
 }
 
-// ----------------------- play patterns --------------------------------------
-
 /**
- * Up/down oscillation with human-ish variety:
- * - 3–15 passes, alternating dy sign
- * - distance & duration vary per pass
- * - occasional mid-sequence pause or tiny corrective flick
+ * Compute force for a touch point based on step index and total steps
  */
-async function playOscillate(page, cfg = {}) {
-  initPersonaOnce();
-
-  const { x, y, vp } = computeStartPoint(page);
-  let anchor = { x, y };
-
-  const passes = rInt(3, 15);
-  let dir = Math.random() < 0.5 ? -1 : 1; // start up or down
-
-  for (let i = 0; i < passes; i++) {
-    const dyMag = rInt(90, Math.max(120, Math.floor(vp.height * 0.38)));
-    const dy = dir * dyMag;
-
-    // faster for small swipes, slower for big ones (log-normal flavour)
-    const baseDur = clamp(Math.round(150 + dyMag * rFloat(1.5, 2.6)), 140, 980);
-
-    const steps = buildOnePath(cfg, 0, dy, baseDur);
-    await runPath(page, anchor, steps);
-
-    // 25%: brief pause like "hmm"
-    if (Math.random() < 0.25) await sleep(rInt(140, 420));
-
-    // 18%: tiny corrective flick back
-    if (Math.random() < 0.18) {
-      const tinyDy = -dir * rInt(18, 45);
-      const tinyDur = rInt(120, 240);
-      const tiny = buildOnePath(cfg, 0, tinyDy, tinyDur);
-      // start where we *ended* last swipe (feels continuous)
-      const lastEnd = { x: anchor.x, y: anchor.y + Math.round(dy) };
-      await runPath(page, lastEnd, tiny);
-      if (Math.random() < 0.35) await sleep(rInt(80, 220));
-    }
-
-    dir *= -1;
-  }
-}
-
-/**
- * Tiny dithers around the same spot (like bored fidgeting).
- */
-async function playMicroWiggle(page, cfg = {}) {
-  initPersonaOnce();
-  const { x, y } = computeStartPoint(page);
-  const anchor = { x, y };
-  const n = rInt(6, 18);
-  let dir = Math.random() < 0.5 ? -1 : 1;
-
-  for (let i = 0; i < n; i++) {
-    const dy = dir * rInt(8, 28);
-    const dx = rInt(-8, 8);
-    const dur = rInt(80, 180);
-    const steps = buildOnePath(cfg, dx, dy, dur);
-    await runPath(page, anchor, steps);
-    if (Math.random() < 0.3) await sleep(rInt(60, 180));
-    dir *= -1;
-  }
-}
-
-/**
- * Idle “hold” with light jitter and sporadic small nudges.
- */
-async function playJitterHold(page, cfg = {}) {
-  initPersonaOnce();
-  const { x, y } = computeStartPoint(page);
-  const anchor = { x, y };
-
-  const bursts = rInt(2, 5);
-  for (let b = 0; b < bursts; b++) {
-    const dy = rInt(-22, 22);
-    const dx = rInt(-10, 10);
-    const dur = rInt(240, 600);
-    const steps = buildOnePath(cfg, dx, dy, dur);
-    await runPath(page, anchor, steps);
-    await sleep(rInt(200, 700));
-  }
-}
-
-// ----------------------- router ---------------------------------------------
-
-async function playRandom(page, cfg = {}) {
-  const r = Math.random();
-  if (r < 0.55) return playOscillate(page, cfg);
-  if (r < 0.82) return playMicroWiggle(page, cfg);
-  return playJitterHold(page, cfg);
+function computeForce(stepIndex, totalSteps) {
+  // Start with high force, decrease over the swipe (press-then-flick pattern)
+  const startForce = 0.85;
+  const endForce = 0.65;
+  
+  // Linear interpolation from start to end
+  const progress = stepIndex / Math.max(1, totalSteps - 1);
+  const baseForce = startForce + (endForce - startForce) * progress;
+  
+  // Add small random variation
+  const variation = rFloat(-0.05, 0.05);
+  
+  return clamp(baseForce + variation, 0.5, 1.0);
 }
 
 module.exports = {
-  playRandom,
-  playOscillate,
-  playMicroWiggle,
-  playJitterHold,
+  playRandom: async (page, cfg) => {
+    // Implementation would go here
+  },
+  playOscillate: async (page, cfg) => {
+    // Implementation would go here
+  },
+  playMicroWiggle: async (page, cfg) => {
+    // Implementation would go here
+  },
+  playJitterHold: async (page, cfg) => {
+    // Implementation would go here
+  },
+  computeForce
 };

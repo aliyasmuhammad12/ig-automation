@@ -277,6 +277,9 @@ function resetSession() {
     arcBurstUntil: null,
     arcBurstMode: null,
   });
+  
+  // Initialize the session properly
+  initPersonaOnce();
 }
 
 module.exports = {
