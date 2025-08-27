@@ -21,7 +21,17 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const { browser, page } = await launchAdsPowerBrowser(profileId, ADSPOWER_API_PORT);
 
   try {
-    await page.setViewport({ width: 390, height: 844, isMobile: true, deviceScaleFactor: 2 });
+    // Get the actual viewport from AdsPower browser instead of overriding it
+    const currentViewport = page.viewport();
+    console.log(`📱 AdsPower browser viewport: ${currentViewport?.width || 'unknown'}x${currentViewport?.height || 'unknown'}`);
+    
+    // Only set viewport if it's not already configured by AdsPower
+    if (!currentViewport || !currentViewport.width || !currentViewport.height) {
+      console.log('⚠️ No viewport detected, setting default mobile viewport');
+      await page.setViewport({ width: 390, height: 844, isMobile: true, deviceScaleFactor: 2 });
+    } else {
+      console.log('✅ Using AdsPower browser resolution');
+    }
 
     console.log('🌐 Navigating to Instagram Reels…');
     try {

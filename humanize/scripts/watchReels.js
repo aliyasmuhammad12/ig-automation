@@ -253,6 +253,11 @@ module.exports = {
       const safe = await getSafeStartPoint(page).catch(() => null);
       const vp = page.viewport() || { width: 360, height: 640 };
       const h = vp.height || 640;
+      const w = vp.width || 360;
+      
+      // Log viewport info for debugging
+      console.log(`[Viewport] Using: ${w}x${h} (AdsPower resolution)`);
+      
       const dyUp = -Math.round(h * rFloat(0.82, 0.90));
 
       try {
