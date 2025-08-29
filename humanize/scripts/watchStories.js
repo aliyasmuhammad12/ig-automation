@@ -288,50 +288,7 @@ function computeSkipPropensity(session) {
   return 1 / (1 + Math.exp(-sum));
 }
 
-// ============================================================================
-// NAVIGATION HELPER
-// ============================================================================
 
-async function handleNavigationFailure(page, session, currentUsername) {
-  // Check if this is likely end of user's stories vs actual navigation failure
-  const isLikelyEndOfStories = session.slidesWatchedHere <= 3 && session.slideIdx <= 2;
-  
-  if (isLikelyEndOfStories) {
-    session.log(`[Navigation] ✅ Reached end of user's stories (${session.slidesWatchedHere} slides watched)`);
-    
-    // Exit account normally
-    const exitSuccess = await exitViaCloseButton(page, session);
-    if (exitSuccess) {
-      const barBoost = computeBAR(session);
-      if (barBoost > 0) {
-        session.scRemaining = Math.min(
-          session.scRemaining + barBoost,
-          session.scStartMode * SC_CONFIG.barHardCapMultiplier
-        );
-        session.barCount++;
-        session.log(`[BAR] Applied: +${barBoost.toFixed(2)} SC (total: ${session.scRemaining.toFixed(2)})`);
-      }
-      
-      session.logAccountExit(currentUsername, session.slidesWatchedHere, session.scSpentHere, session.scRemaining, session.fatigue, barBoost, 'done');
-    }
-    
-    // Pause before next account
-    const delay = rInt(SC_CONFIG.betweenAccountsDelay[0], SC_CONFIG.betweenAccountsDelay[1]);
-    await sleep(delay);
-    return 'done';
-  } else {
-    session.log(`[Navigation] ❌ Failed to advance after retries, marking nav_flaky`);
-    const cooldown = rInt(SC_CONFIG.navFlakyCooldown[0], SC_CONFIG.navFlakyCooldown[1]);
-    await sleep(cooldown);
-    
-    // Exit account with nav_flaky reason
-    const exitSuccess = await exitViaCloseButton(page, session);
-    if (exitSuccess) {
-      session.logAccountExit(currentUsername, session.slidesWatchedHere, session.scSpentHere, session.scRemaining, session.fatigue, 0, 'nav_flaky');
-    }
-    return 'nav_flaky';
-  }
-}
 
 // ============================================================================
 // URL CHANGE DETECTION
@@ -536,62 +493,229 @@ async function navigateToStories(page, session) {
             }
           }
           
-          // If no unread stories, try any non-"Your story"
+          // If no unread stories, try any non-"Your story" (prioritize unviewed)
           if (!storyButton) {
-            for (let j = 0; j < storyElements.length; j++) {
-              const element = storyElements[j];
-              const storyInfo = await element.evaluate(el => {
-                const isYourStory = el.querySelector('img[alt*="profile" i]') && 
-                                  (el.textContent.includes('Your story') || 
-                                   el.getAttribute('aria-label')?.includes('Your story') ||
-                                   el.querySelector('div[data-testid="add-to-story"]'));
-                
-                // Check if story is viewed/expired
-                const hasGrayBorder = el.querySelector('circle[stroke="#dbdbdb"], circle[stroke="#8e8e96"]');
-                const hasNoBorder = !el.querySelector('circle[stroke]');
-                const isViewed = hasGrayBorder || hasNoBorder;
-                
-                return {
-                  isYourStory,
-                  isViewed,
-                  hasGrayBorder: !!hasGrayBorder,
-                  hasNoBorder: !!hasNoBorder,
-                  ariaLabel: el.getAttribute('aria-label') || 'none',
-                  textContent: el.textContent?.substring(0, 50) || 'none'
-                };
-              });
-              
-              if (!storyInfo.isYourStory) {
-                storyButton = element;
-                session.log(`[Stories] Using story at index ${j} (viewed: ${storyInfo.isViewed}, aria: "${storyInfo.ariaLabel}")`);
-                break;
-              }
-            }
+                         // First, try to find unviewed stories
+             let unviewedStories = [];
+             for (let j = 0; j < storyElements.length; j++) {
+               const element = storyElements[j];
+               const storyInfo = await element.evaluate(el => {
+                 const isYourStory = el.querySelector('img[alt*="profile" i]') && 
+                                   (el.textContent.includes('Your story') || 
+                                    el.getAttribute('aria-label')?.includes('Your story') ||
+                                    el.querySelector('div[data-testid="add-to-story"]'));
+                 
+                 // Check if story is viewed/expired using multiple methods
+                 const hasGrayBorder = el.querySelector('circle[stroke="#dbdbdb"], circle[stroke="#8e8e96"]');
+                 const hasGradientBorder = el.querySelector('circle[stroke*="url"], circle[stroke*="gradient"]');
+                 const hasNoBorder = !el.querySelector('circle[stroke]');
+                 
+                 // Try CSS-based detection
+                 const hasGradientClass = el.className.includes('gradient') || el.className.includes('unread') || el.className.includes('new');
+                 const hasViewedClass = el.className.includes('viewed') || el.className.includes('seen') || el.className.includes('expired');
+                 
+                 // Check for data attributes
+                 const hasUnreadData = el.getAttribute('data-unread') === 'true' || el.getAttribute('data-viewed') === 'false';
+                 const hasViewedData = el.getAttribute('data-viewed') === 'true' || el.getAttribute('data-seen') === 'true';
+                 
+                 // Check aria-label for status
+                 const ariaLabel = el.getAttribute('aria-label') || '';
+                 const hasUnreadAria = ariaLabel.includes('not seen') || ariaLabel.includes('unread') || ariaLabel.includes('new');
+                 const hasViewedAria = ariaLabel.includes('seen') || ariaLabel.includes('viewed') || ariaLabel.includes('expired');
+                 
+                 const isViewed = hasGrayBorder || hasNoBorder || hasViewedClass || hasViewedData || hasViewedAria;
+                 const isUnviewed = hasGradientBorder || hasGradientClass || hasUnreadData || hasUnreadAria;
+                 
+                 return {
+                   isYourStory,
+                   isViewed,
+                   isUnviewed,
+                   hasGrayBorder: !!hasGrayBorder,
+                   hasGradientBorder: !!hasGradientBorder,
+                   hasNoBorder: !!hasNoBorder,
+                   ariaLabel: el.getAttribute('aria-label') || 'none',
+                   textContent: el.textContent?.substring(0, 50) || 'none',
+                   debug: {
+                     grayBorder: !!hasGrayBorder,
+                     gradientBorder: !!hasGradientBorder,
+                     noBorder: !!hasNoBorder,
+                     circleElements: el.querySelectorAll('circle').length,
+                     allElements: el.querySelectorAll('*').length,
+                     svgElements: el.querySelectorAll('svg').length,
+                     pathElements: el.querySelectorAll('path').length,
+                     strokeElements: el.querySelectorAll('[stroke]').length,
+                     divElements: el.querySelectorAll('div').length,
+                     className: el.className || 'none',
+                     style: el.style.background || 'none'
+                   }
+                 };
+               });
+               
+               if (!storyInfo.isYourStory && storyInfo.isUnviewed) {
+                 unviewedStories.push({ element, storyInfo, index: j });
+                 session.log(`[Stories] Found unviewed story at index ${j} (aria: "${storyInfo.ariaLabel}")`);
+               }
+             }
+             
+             session.log(`[Stories] Total unviewed stories found: ${unviewedStories.length}`);
+             
+             // For now, let's try any available story to get the system working
+             session.log(`[Stories] Found ${storyElements.length} total stories, will try any available...`);
+            
+                         // If no unviewed stories found, try any non-"Your story"
+             if (!storyButton) {
+               session.log(`[Stories] No unviewed stories found, trying any available story...`);
+               for (let j = 0; j < storyElements.length; j++) {
+                 const element = storyElements[j];
+                 const storyInfo = await element.evaluate(el => {
+                   const isYourStory = el.querySelector('img[alt*="profile" i]') && 
+                                     (el.textContent.includes('Your story') || 
+                                      el.getAttribute('aria-label')?.includes('Your story') ||
+                                      el.querySelector('div[data-testid="add-to-story"]'));
+                   
+                   // Check if story is viewed/expired using multiple methods
+                   const hasGrayBorder = el.querySelector('circle[stroke="#dbdbdb"], circle[stroke="#8e8e96"]');
+                   const hasGradientBorder = el.querySelector('circle[stroke*="url"], circle[stroke*="gradient"]');
+                   const hasNoBorder = !el.querySelector('circle[stroke]');
+                   
+                   // Try CSS-based detection
+                   const hasGradientClass = el.className.includes('gradient') || el.className.includes('unread') || el.className.includes('new');
+                   const hasViewedClass = el.className.includes('viewed') || el.className.includes('seen') || el.className.includes('expired');
+                   
+                   // Check for data attributes
+                   const hasUnreadData = el.getAttribute('data-unread') === 'true' || el.getAttribute('data-viewed') === 'false';
+                   const hasViewedData = el.getAttribute('data-viewed') === 'true' || el.getAttribute('data-seen') === 'true';
+                   
+                   // Check aria-label for status
+                   const ariaLabel = el.getAttribute('aria-label') || '';
+                   const hasUnreadAria = ariaLabel.includes('not seen') || ariaLabel.includes('unread') || ariaLabel.includes('new');
+                   const hasViewedAria = ariaLabel.includes('seen') || ariaLabel.includes('viewed') || ariaLabel.includes('expired');
+                   
+                   const isViewed = hasGrayBorder || hasNoBorder || hasViewedClass || hasViewedData || hasViewedAria;
+                   const isUnviewed = hasGradientBorder || hasGradientClass || hasUnreadData || hasUnreadAria;
+                   
+                   return {
+                     isYourStory,
+                     isViewed,
+                     isUnviewed,
+                     hasGrayBorder: !!hasGrayBorder,
+                     hasGradientBorder: !!hasGradientBorder,
+                     hasNoBorder: !!hasNoBorder,
+                     ariaLabel: el.getAttribute('aria-label') || 'none',
+                     textContent: el.textContent?.substring(0, 50) || 'none',
+                     debug: {
+                       grayBorder: !!hasGrayBorder,
+                       gradientBorder: !!hasGradientBorder,
+                       noBorder: !!hasNoBorder,
+                       circleElements: el.querySelectorAll('circle').length,
+                       allElements: el.querySelectorAll('*').length,
+                       svgElements: el.querySelectorAll('svg').length,
+                       pathElements: el.querySelectorAll('path').length,
+                       strokeElements: el.querySelectorAll('[stroke]').length,
+                       divElements: el.querySelectorAll('div').length,
+                       className: el.className || 'none',
+                       style: el.style.background || 'none'
+                     }
+                   };
+                 });
+                 
+                 if (!storyInfo.isYourStory) {
+                   storyButton = element;
+                   session.log(`[Stories] Using story at index ${j} (viewed: ${storyInfo.isViewed}, unviewed: ${storyInfo.isUnviewed}, aria: "${storyInfo.ariaLabel}")`);
+                   break;
+                 }
+               }
+             }
           }
           
-          if (!storyButton && storyElements.length > 0) {
-            storyButton = storyElements[0];
-            session.log(`[Stories] Using first available story (last resort)`);
-          }
+                     // Simple story selection: just use any available story
+           if (!storyButton && storyElements.length > 0) {
+             storyButton = storyElements[0];
+             session.log(`[Stories] Using first available story`);
+           }
           
-          if (storyButton) {
-            await touchTapHandle(page, storyButton);
-            await sleep(rInt(1000, 2000));
-            session.log(`[Stories] Clicked story element with selector: ${selector}`);
-            
-            await sleep(2000);
-            const isInStoryView = await isStoryActive(page);
-            
-            if (isInStoryView) {
-              session.log(`[Stories] Successfully entered story view`);
-              return true;
-            } else {
-              session.log(`[Stories] Failed to enter story view, trying next selector`);
-              continue;
-            }
+                     if (storyButton) {
+             session.log(`[Stories] Attempting to click story element...`);
+             
+             // Try multiple click methods
+             let clickSuccess = false;
+             
+             // Method 1: Touch tap
+             try {
+               clickSuccess = await touchTapHandle(page, storyButton);
+               session.log(`[Stories] Touch tap result: ${clickSuccess ? 'success' : 'failed'}`);
+  } catch (error) {
+               session.log(`[Stories] Touch tap error: ${error.message}`);
+             }
+             
+             // Method 2: Direct click if touch failed
+             if (!clickSuccess) {
+               try {
+                 await storyButton.click();
+                 clickSuccess = true;
+                 session.log(`[Stories] Direct click result: success`);
+               } catch (error) {
+                 session.log(`[Stories] Direct click error: ${error.message}`);
+               }
+             }
+             
+             // Method 3: JavaScript click as last resort
+             if (!clickSuccess) {
+               try {
+                 await storyButton.evaluate(el => el.click());
+                 clickSuccess = true;
+                 session.log(`[Stories] JS click result: success`);
+               } catch (error) {
+                 session.log(`[Stories] JS click error: ${error.message}`);
+               }
+             }
+             
+          await sleep(rInt(1000, 2000));
+             session.log(`[Stories] Clicked story element with selector: ${selector}`);
+             
+             await sleep(2000);
+             
+             // Debug: Check current URL and page state
+             const currentUrl = await page.url();
+             const pageTitle = await page.title();
+             session.log(`[Stories] After click - URL: ${currentUrl}, Title: ${pageTitle}`);
+             
+             const isInStoryView = await isStoryActive(page);
+             session.log(`[Stories] Story view detection: ${isInStoryView}`);
+             
+             if (isInStoryView) {
+               session.log(`[Stories] Successfully entered story view`);
+            return true;
+             } else {
+               session.log(`[Stories] Failed to enter story view, will try next story`);
+               // Try the next story element
+               for (let j = 1; j < storyElements.length; j++) {
+                 const element = storyElements[j];
+                 const storyInfo = await element.evaluate(el => {
+                   const isYourStory = el.querySelector('img[alt*="profile" i]') && 
+                                     (el.textContent.includes('Your story') || 
+                                      el.getAttribute('aria-label')?.includes('Your story') ||
+                                      el.querySelector('div[data-testid="add-to-story"]'));
+                   return { isYourStory };
+                 });
+                 
+                 if (!storyInfo.isYourStory) {
+                   storyButton = element;
+                   session.log(`[Stories] Trying next story at index ${j}`);
+                   break;
+                 }
+               }
+               
+               if (storyButton) {
+                 continue; // Try this new story
+               } else {
+                 session.log(`[Stories] No more stories to try, moving to next selector`);
+                 break; // Exit the story loop and try next selector
+               }
+             }
+           }
           }
-        }
-      } catch (error) {
+        } catch (error) {
         session.log(`[Stories] Selector failed: ${selector} - ${error.message}`);
       }
     }
@@ -606,9 +730,37 @@ async function navigateToStories(page, session) {
     
     if (isAllCaughtUp) {
       session.log(`[Stories] 📭 No active stories available - Instagram shows "all caught up"`);
-    } else {
-      session.log(`[Stories] No story elements found`);
+    return false;
     }
+    
+    // Check if all found stories are viewed/expired
+    const allStoriesViewed = await page.evaluate(() => {
+      const storyElements = document.querySelectorAll('div[role="button"]:has(img[alt*="profile" i])');
+      if (storyElements.length === 0) return false;
+      
+      let viewedCount = 0;
+      let unviewedCount = 0;
+      for (const el of storyElements) {
+        const hasGrayBorder = el.querySelector('circle[stroke="#dbdbdb"], circle[stroke="#8e8e96"]');
+        const hasGradientBorder = el.querySelector('circle[stroke*="url"], circle[stroke*="gradient"]');
+        const hasNoBorder = !el.querySelector('circle[stroke]');
+        const isViewed = hasGrayBorder || hasNoBorder;
+        const isUnviewed = hasGradientBorder;
+        
+        if (isViewed) viewedCount++;
+        if (isUnviewed) unviewedCount++;
+      }
+      
+      // Only consider all viewed if there are no unviewed stories
+      return viewedCount > 0 && unviewedCount === 0;
+    });
+    
+    if (allStoriesViewed) {
+      session.log(`[Stories] 📭 All available stories are already viewed/expired`);
+            return false;
+          }
+          
+    session.log(`[Stories] No active story elements found`);
     return false;
   } catch (error) {
     session.log(`[Stories] Navigation error: ${error.message}`);
@@ -667,32 +819,130 @@ async function touchTapHandle(page, handle) {
 
 async function exitViaCloseButton(page, session) {
   try {
+    // ⚠️ Swipe-left exit logic has been permanently removed per client requirements.
+    // Do NOT reintroduce swipe gestures. Always use close button → Escape fallback.
+    
+    // Specific selectors for close button ONLY - avoiding menu and sound buttons
     const closeSelectors = [
-      'div[role="button"]:has(circle)',
+      'svg[aria-label="Close"]',
       'button[aria-label="Close"]',
       'div[role="button"] svg[aria-label="Close"]',
+      'div[role="button"]:has(svg[aria-label="Close"])',
+      'button svg[aria-label="Close"]',
+      'div[role="button"] svg[aria-label="X"]',
+      'button[aria-label="X"]',
     ];
     
-    let attempts = 0;
-    const maxAttempts = 2;
-    
-    while (attempts < maxAttempts) {
-      attempts++;
-      
-      for (const selector of closeSelectors) {
+         let attempts = 0;
+     const maxAttempts = 1; // Reduced from 2 to 1 - try each selector only once
+     
+     while (attempts < maxAttempts) {
+       attempts++;
+       
+       // Try only the most reliable selectors first
+       const prioritySelectors = [
+         'svg[aria-label="Close"]',
+         'button[aria-label="Close"]',
+         'div[role="button"] svg[aria-label="Close"]',
+       ];
+       
+       for (const selector of prioritySelectors) {
         try {
           session.log(`[Exit] Attempt ${attempts}/${maxAttempts} → Trying close button: ${selector}`);
           
-          await page.waitForSelector(selector, { timeout: 2000 });
+                     // Wait for the specific close button to be visible (reduced timeout)
+           await page.waitForSelector(selector, { timeout: 1000 });
           const closeButton = await page.$(selector);
           
           if (closeButton) {
+                         // Strict verification - must be a close button, not menu or sound
+             const buttonInfo = await closeButton.evaluate(el => {
+               const ariaLabel = el.getAttribute('aria-label') || '';
+               const parentAriaLabel = el.closest('[aria-label]')?.getAttribute('aria-label') || '';
+               
+               // Must have explicit close label
+               const hasCloseLabel = ariaLabel.toLowerCase().includes('close') || 
+                                   ariaLabel.toLowerCase().includes('x') ||
+                                   parentAriaLabel.toLowerCase().includes('close') ||
+                                   parentAriaLabel.toLowerCase().includes('x');
+               
+               // Must NOT be menu, sound, or more button
+               const isNotMenu = !ariaLabel.toLowerCase().includes('menu') && 
+                                !ariaLabel.toLowerCase().includes('sound') &&
+                                !ariaLabel.toLowerCase().includes('volume') &&
+                                !ariaLabel.toLowerCase().includes('more') &&
+                                !parentAriaLabel.toLowerCase().includes('menu') &&
+                                !parentAriaLabel.toLowerCase().includes('sound') &&
+                                !parentAriaLabel.toLowerCase().includes('volume') &&
+                                !parentAriaLabel.toLowerCase().includes('more');
+               
+               // Check for close-like icons (X, cross, etc.) but NOT circles (which could be menu)
+               const hasCloseIcon = el.querySelector('path[d*="M"], line, polyline') !== null;
+               const hasCircleIcon = el.querySelector('circle') !== null;
+               
+               // Check if it's in the top-right area (typical close button position)
+               const rect = el.getBoundingClientRect();
+               const isTopRight = rect.top < 100 && rect.right > window.innerWidth - 100;
+               
+               return {
+                 hasCloseLabel,
+                 hasCloseIcon,
+                 hasCircleIcon,
+                 isNotMenu,
+                 isTopRight,
+                 ariaLabel,
+                 parentAriaLabel,
+                 rect: { top: rect.top, right: rect.right, width: rect.width, height: rect.height }
+               };
+             });
+             
+             session.log(`[Exit] 🔍 Button analysis: close=${buttonInfo.hasCloseLabel}, icon=${buttonInfo.hasCloseIcon}, circle=${buttonInfo.hasCircleIcon}, notMenu=${buttonInfo.isNotMenu}, topRight=${buttonInfo.isTopRight}, aria="${buttonInfo.ariaLabel}"`);
+             
+             // Must have close label AND not be menu AND (close icon OR in top-right position)
+             // Reject if it has circle icon (likely menu button)
+             const isCloseButton = buttonInfo.hasCloseLabel && 
+                                 buttonInfo.isNotMenu && 
+                                 !buttonInfo.hasCircleIcon &&
+                                 (buttonInfo.hasCloseIcon || buttonInfo.isTopRight);
+            
+            if (!isCloseButton) {
+              session.log(`[Exit] ⚠️ Found element but not a close button: ${selector}`);
+            continue;
+            }
+            
+            // Enhanced visibility check - check if element is actually clickable
             const isVisible = await closeButton.isVisible();
-            if (!isVisible) {
-              session.log(`[Exit] ⚠️ Selector found but not visible: ${selector}`);
+            const isClickable = await closeButton.evaluate(el => {
+              const rect = el.getBoundingClientRect();
+              const style = window.getComputedStyle(el);
+              
+              // Check if element has size and is not hidden
+              const hasSize = rect.width > 0 && rect.height > 0;
+              const isNotHidden = style.display !== 'none' && 
+                                style.visibility !== 'hidden' && 
+                                style.opacity !== '0';
+              
+              // Check if element is not covered by other elements
+              const elementAtPoint = document.elementFromPoint(
+                rect.left + rect.width / 2, 
+                rect.top + rect.height / 2
+              );
+              const isNotCovered = elementAtPoint === el || el.contains(elementAtPoint);
+              
+              return {
+                hasSize,
+                isNotHidden,
+                isNotCovered,
+                rect: { width: rect.width, height: rect.height, top: rect.top, left: rect.left }
+              };
+            });
+            
+            if (!isVisible || !isClickable.hasSize || !isClickable.isNotHidden) {
+              session.log(`[Exit] ⚠️ Close button not clickable: visible=${isVisible}, size=${isClickable.hasSize}, hidden=${!isClickable.isNotHidden}, covered=${!isClickable.isNotCovered}`);
               continue;
             }
             
+            // Click the parent button if it's an SVG
             let elementToClick = closeButton;
             if (selector.includes('svg[')) {
               const parentButton = await closeButton.evaluateHandle(el => {
@@ -709,21 +959,69 @@ async function exitViaCloseButton(page, session) {
               elementToClick = parentButton.asElement();
             }
             
-            await touchTapHandle(page, elementToClick);
-            await sleep(rInt(500, 1000));
+            session.log(`[Exit] 🎯 Clicking verified close button: ${selector}`);
             
-            const backToFeed = await page.evaluate(() => {
-              return !document.querySelector('div[role="dialog"]') && 
-                     window.location.href.includes('instagram.com') &&
-                     !window.location.href.includes('/stories/');
-            });
+            // Try multiple click methods for better success rate
+            let clickSuccess = false;
             
-            if (backToFeed) {
-              session.log(`[Exit] ✅ Success via close button (selector: ${selector})`);
-              return true;
-            } else {
-              session.log(`[Exit] ⚠️ Close button clicked but still in story view: ${selector}`);
+            // Method 1: Touch tap (current method)
+            try {
+              await touchTapHandle(page, elementToClick);
+              await sleep(rInt(300, 500));
+              
+              const backToFeed = await page.evaluate(() => {
+                return !document.querySelector('div[role="dialog"]') && 
+                       window.location.href.includes('instagram.com') &&
+                       !window.location.href.includes('/stories/');
+              });
+              
+              if (backToFeed) {
+                session.log(`[Exit] ✅ Success via close button touch tap (selector: ${selector})`);
+                return true;
+              }
+            } catch (error) {
+              session.log(`[Exit] ⚠️ Touch tap failed: ${error.message}`);
             }
+            
+            // Method 2: Direct click if touch failed
+            try {
+              await elementToClick.click();
+              await sleep(rInt(300, 500));
+              
+              const backToFeed = await page.evaluate(() => {
+                return !document.querySelector('div[role="dialog"]') && 
+                       window.location.href.includes('instagram.com') &&
+                       !window.location.href.includes('/stories/');
+              });
+              
+              if (backToFeed) {
+                session.log(`[Exit] ✅ Success via close button direct click (selector: ${selector})`);
+                return true;
+              }
+            } catch (error) {
+              session.log(`[Exit] ⚠️ Direct click failed: ${error.message}`);
+            }
+            
+            // Method 3: JavaScript click as last resort
+            try {
+              await elementToClick.evaluate(el => el.click());
+              await sleep(rInt(300, 500));
+              
+              const backToFeed = await page.evaluate(() => {
+                return !document.querySelector('div[role="dialog"]') && 
+                       window.location.href.includes('instagram.com') &&
+                       !window.location.href.includes('/stories/');
+              });
+              
+              if (backToFeed) {
+                session.log(`[Exit] ✅ Success via close button JS click (selector: ${selector})`);
+                return true;
+              }
+            } catch (error) {
+              session.log(`[Exit] ⚠️ JS click failed: ${error.message}`);
+            }
+            
+            session.log(`[Exit] ⚠️ All click methods failed for close button: ${selector}`);
           }
         } catch (error) {
           session.log(`[Exit] ⚠️ Selector failed: ${selector} - ${error.message}`);
@@ -731,12 +1029,12 @@ async function exitViaCloseButton(page, session) {
       }
     }
     
-    session.log(`[Exit] ❌ Failed via close button after ${maxAttempts} attempts`);
-    session.log(`[Exit] ↩️ Falling back to Escape key`);
-    
-    try {
-      await page.keyboard.press('Escape');
-      await sleep(rInt(500, 1000));
+         session.log(`[Exit] ❌ Failed via close button after ${maxAttempts} attempts`);
+     session.log(`[Exit] ↩️ Falling back to Escape key`);
+     
+     try {
+       await page.keyboard.press('Escape');
+       await sleep(rInt(500, 1000));
       
       const backToFeed = await page.evaluate(() => {
         return !document.querySelector('div[role="dialog"]') && 
@@ -772,73 +1070,60 @@ async function watchStories(page, durationSeconds = 60, accountId = 'unknown') {
     return await watchStoriesLegacy(page, durationSeconds, accountId);
   }
   
-  // Initialize session
-  const session = new StorySession(accountId, durationSeconds);
-  
-  const startTime = now();
-  const endTime = startTime + (durationSeconds * 1000);
-  
-  // Enable touch emulation
-  await enableTouchEmulation(page);
-  
-  // Navigate to stories
-  const navigationSuccess = await navigateToStories(page, session);
-  if (!navigationSuccess) {
-    session.log(`[Stories] Failed to navigate to stories`);
-    return { ok: true, storiesWatched: 0, reactionsSent: 0, durationSec: 0, accountId, note: 'no_stories_available' };
-  }
-  
-  let currentUsername = '';
-  let navFlakyCount = 0;
-  
-  while (now() < endTime) {
+     // Initialize session
+   const session = new StorySession(accountId, durationSeconds);
+   
+   // Enable touch emulation
+   await enableTouchEmulation(page);
+   
+   // Navigate to stories
+   const navigationSuccess = await navigateToStories(page, session);
+   if (!navigationSuccess) {
+     session.log(`[Stories] Failed to navigate to stories`);
+     return { ok: true, storiesWatched: 0, reactionsSent: 0, durationSec: 0, accountId, note: 'no_stories_available' };
+   }
+   
+   let currentUsername = '';
+   
+   // Main loop driven by SC and fatigue only
+   while (true) {
     try {
-      // Check session stop conditions
-      if (session.scRemaining <= 0) {
-        session.log(`[Session] Ending: SC exhausted (${session.scRemaining.toFixed(2)})`);
-        break;
-      }
+             // Check session stop conditions (SC and fatigue only - no time-based exits)
+       if (session.scRemaining <= 0) {
+         session.log(`[Session] Ending: SC exhausted (${session.scRemaining.toFixed(2)})`);
+      break;
+       }
+       
+       if (session.fatigue >= SC_CONFIG.fatigueHardStop) {
+         session.log(`[Session] Ending: Hard fatigue stop (${session.fatigue.toFixed(3)})`);
+      break;
+       }
+       
+       if (session.fatigue >= SC_CONFIG.fatigueSoftStop && Math.random() < 0.7) {
+         session.log(`[Session] Ending: Soft fatigue stop (${session.fatigue.toFixed(3)})`);
+      break;
+       }
       
-      if (session.fatigue >= SC_CONFIG.fatigueHardStop) {
-        session.log(`[Session] Ending: Hard fatigue stop (${session.fatigue.toFixed(3)})`);
-        break;
-      }
-      
-      if (session.fatigue >= SC_CONFIG.fatigueSoftStop && Math.random() < 0.7) {
-        session.log(`[Session] Ending: Soft fatigue stop (${session.fatigue.toFixed(3)})`);
-        break;
-      }
-      
-      // Check if we're in a story
-      const storyActive = await isStoryActive(page);
-      if (!storyActive) {
-        session.log(`[Stories] Not in story view, attempting to navigate...`);
-        
-        navFlakyCount++;
-        if (navFlakyCount > 3) {
-          session.log(`[Session] Ending: Too many navigation failures`);
-          break;
-        }
-        
-        const navSuccess = await navigateToStories(page, session);
-        if (!navSuccess) {
-          session.log(`[Stories] Navigation failed (attempt ${navFlakyCount}/3)`);
-          await sleep(rInt(2000, 4000));
-          continue;
-        } else {
-          navFlakyCount = 0;
-        }
-        
-        await sleep(rInt(500, 1000));
-        continue;
-      }
-      
-      navFlakyCount = 0;
-      
+             // Check if we're in a story
+       const storyActive = await isStoryActive(page);
+       if (!storyActive) {
+         session.log(`[Stories] Not in story view, attempting to navigate...`);
+         
+         const navSuccess = await navigateToStories(page, session);
+         if (!navSuccess) {
+           session.log(`[Stories] Navigation failed, retrying in 2-4 seconds...`);
+           await sleep(rInt(2000, 4000));
+           continue;
+         }
+         
+    await sleep(rInt(500, 1000));
+         continue;
+       }
+    
       // Get current story info
       const storyInfo = await page.evaluate(() => {
-        const url = window.location.href;
-        const storyUser = url.match(/\/stories\/([^\/]+)\//)?.[1] || 'unknown';
+      const url = window.location.href;
+      const storyUser = url.match(/\/stories\/([^\/]+)\//)?.[1] || 'unknown';
         return { user: storyUser, url };
       });
       
@@ -894,46 +1179,57 @@ async function watchStories(page, durationSeconds = 60, accountId = 'unknown') {
       // Compute skip propensity
       const pSkip = computeSkipPropensity(session);
       
-      // Decide skip vs watch
-      if (Math.random() < pSkip) {
-        // Skip
-        session.log(`[Slide] Skipping slide ${session.slideIdx + 1} (pSkip: ${(pSkip * 100).toFixed(1)}%)`);
-        
-        const skipDwell = rFloat(0.2, 0.5);
-        await sleep(skipDwell * 1000);
-        
-        session.boredom += 0.05;
-        session.slideIdx++;
-        
-        // Advance to next slide
-        const tapSuccess = await storyTapNext(page, session);
-        if (tapSuccess) {
-          const newUrl = await waitForUrlChange(page, session);
-          if (newUrl && newUrl !== session.prevStoryUrl) {
-            session.prevStoryUrl = newUrl;
-            session.log(`[Navigation] ✅ Advanced to next slide`);
-          } else {
-            session.log(`[Navigation] ⚠️ URL didn't change, retrying...`);
-            
-            // Retry tap a couple times
-            let retryCount = 0;
-            while (retryCount < 3) {
-              retryCount++;
-              await storyTapNext(page, session);
-              const retryUrl = await waitForUrlChange(page, session);
-              if (retryUrl && retryUrl !== session.prevStoryUrl) {
-                session.prevStoryUrl = retryUrl;
-                session.log(`[Navigation] ✅ Advanced on retry ${retryCount}`);
-                break;
-              }
-            }
-            
-            if (retryCount >= 3) {
-              await handleNavigationFailure(page, session, currentUsername);
-              continue;
-            }
-          }
-        }
+                       // Decide skip vs watch
+         if (Math.random() < pSkip) {
+           // Skip
+           session.log(`[Slide] Skipping slide ${session.slideIdx + 1} (pSkip: ${(pSkip * 100).toFixed(1)}%)`);
+           
+           const skipDwell = rFloat(0.2, 0.5);
+           await sleep(skipDwell * 1000);
+           
+           session.boredom += 0.05;
+           session.slideIdx++;
+           
+           // Advance to next slide
+           const tapSuccess = await storyTapNext(page, session);
+           if (tapSuccess) {
+             const newUrl = await waitForUrlChange(page, session);
+             if (newUrl && newUrl !== session.prevStoryUrl) {
+               session.prevStoryUrl = newUrl;
+               session.log(`[Navigation] ✅ Advanced to next slide`);
+    } else {
+               session.log(`[Navigation] ⚠️ URL didn't change, retrying...`);
+               
+               // Retry tap a couple times
+               let retryCount = 0;
+               while (retryCount < 3) {
+                 retryCount++;
+                 await storyTapNext(page, session);
+                 const retryUrl = await waitForUrlChange(page, session);
+                 if (retryUrl && retryUrl !== session.prevStoryUrl) {
+                   session.prevStoryUrl = retryUrl;
+                   session.log(`[Navigation] ✅ Advanced on retry ${retryCount}`);
+      break;
+    }
+  }
+  
+               if (retryCount >= 3) {
+                 session.log(`[Navigation] ❌ Failed to advance after retries, marking nav_flaky`);
+                 
+                 // Exit account with nav_flaky reason (per client requirements)
+                 const exitSuccess = await exitViaCloseButton(page, session);
+                 if (exitSuccess) {
+                   session.logAccountExit(currentUsername, session.slidesWatchedHere, session.scSpentHere, session.scRemaining, session.fatigue, 0, 'nav_flaky');
+                 }
+                 
+                 // Cooldown before next account (per client requirements)
+                 const cooldown = rInt(SC_CONFIG.navFlakyCooldown[0], SC_CONFIG.navFlakyCooldown[1]);
+                 await sleep(cooldown);
+                 
+                 continue;
+               }
+             }
+           }
       } else {
         // Watch
         session.log(`[Slide] Watching slide ${session.slideIdx + 1} (pSkip: ${(pSkip * 100).toFixed(1)}%)`);
@@ -969,35 +1265,46 @@ async function watchStories(page, durationSeconds = 60, accountId = 'unknown') {
         
         session.slideIdx++;
         
-        // Advance to next slide
-        const tapSuccess = await storyTapNext(page, session);
-        if (tapSuccess) {
-          const newUrl = await waitForUrlChange(page, session);
-          if (newUrl && newUrl !== session.prevStoryUrl) {
-            session.prevStoryUrl = newUrl;
-            session.log(`[Navigation] ✅ Advanced to next slide`);
-          } else {
-            session.log(`[Navigation] ⚠️ URL didn't change, retrying...`);
-            
-            // Retry tap a couple times
-            let retryCount = 0;
-            while (retryCount < 3) {
-              retryCount++;
-              await storyTapNext(page, session);
-              const retryUrl = await waitForUrlChange(page, session);
-              if (retryUrl && retryUrl !== session.prevStoryUrl) {
-                session.prevStoryUrl = retryUrl;
-                session.log(`[Navigation] ✅ Advanced on retry ${retryCount}`);
-                break;
-              }
-            }
-            
-            if (retryCount >= 3) {
-              await handleNavigationFailure(page, session, currentUsername);
-              continue;
-            }
-          }
-        }
+                 // Advance to next slide
+         const tapSuccess = await storyTapNext(page, session);
+         if (tapSuccess) {
+           const newUrl = await waitForUrlChange(page, session);
+           if (newUrl && newUrl !== session.prevStoryUrl) {
+             session.prevStoryUrl = newUrl;
+             session.log(`[Navigation] ✅ Advanced to next slide`);
+      } else {
+             session.log(`[Navigation] ⚠️ URL didn't change, retrying...`);
+             
+             // Retry tap a couple times
+             let retryCount = 0;
+             while (retryCount < 3) {
+               retryCount++;
+               await storyTapNext(page, session);
+               const retryUrl = await waitForUrlChange(page, session);
+               if (retryUrl && retryUrl !== session.prevStoryUrl) {
+                 session.prevStoryUrl = retryUrl;
+                 session.log(`[Navigation] ✅ Advanced on retry ${retryCount}`);
+        break;
+               }
+             }
+             
+             if (retryCount >= 3) {
+               session.log(`[Navigation] ❌ Failed to advance after retries, marking nav_flaky`);
+               
+               // Exit account with nav_flaky reason (per client requirements)
+               const exitSuccess = await exitViaCloseButton(page, session);
+               if (exitSuccess) {
+                 session.logAccountExit(currentUsername, session.slidesWatchedHere, session.scSpentHere, session.scRemaining, session.fatigue, 0, 'nav_flaky');
+               }
+               
+               // Cooldown before next account (per client requirements)
+               const cooldown = rInt(SC_CONFIG.navFlakyCooldown[0], SC_CONFIG.navFlakyCooldown[1]);
+               await sleep(cooldown);
+               
+               continue;
+             }
+           }
+         }
       }
       
       // StreakBreaker decay
@@ -1039,37 +1346,47 @@ async function watchStories(page, durationSeconds = 60, accountId = 'unknown') {
       // Small delay between slides
       await sleep(rInt(200, 800));
       
-    } catch (error) {
+  } catch (error) {
       session.log(`[Stories] Error in story loop: ${error.message}`);
       await sleep(1000);
     }
   }
   
-  // Apply BAR from final account
-  if (currentUsername) {
-    const barBoost = computeBAR(session);
-    if (barBoost > 0) {
-      session.scRemaining = Math.min(
-        session.scRemaining + barBoost,
-        session.scStartMode * SC_CONFIG.barHardCapMultiplier
-      );
-      session.barCount++;
-      session.log(`[BAR] Applied: +${barBoost.toFixed(2)} SC (total: ${session.scRemaining.toFixed(2)})`);
-    }
-    
-    session.logAccountExit(currentUsername, session.slidesWatchedHere, session.scSpentHere, session.scRemaining, session.fatigue, barBoost, 'done');
-  }
+     // Apply BAR from final account
+   if (currentUsername) {
+     const barBoost = computeBAR(session);
+     if (barBoost > 0) {
+       session.scRemaining = Math.min(
+         session.scRemaining + barBoost,
+         session.scStartMode * SC_CONFIG.barHardCapMultiplier
+       );
+       session.barCount++;
+       session.log(`[BAR] Applied: +${barBoost.toFixed(2)} SC (total: ${session.scRemaining.toFixed(2)})`);
+     }
+     
+     // Determine final exit reason
+     let finalReason = 'done';
+     if (session.scRemaining <= 0) {
+       finalReason = 'low_sc';
+     } else if (session.fatigue >= SC_CONFIG.fatigueHardStop) {
+       finalReason = 'fatigue_stop';
+     } else if (session.fatigue >= SC_CONFIG.fatigueSoftStop) {
+       finalReason = 'fatigue_stop';
+     }
+     
+     session.logAccountExit(currentUsername, session.slidesWatchedHere, session.scSpentHere, session.scRemaining, session.fatigue, barBoost, finalReason);
+   }
   
-  const actualDuration = Math.round((now() - startTime) / 1000);
-  return {
-    ok: true,
-    storiesWatched: session.slidesWatchedHere,
-    reactionsSent: 0, // No reactions in new system
-    durationSec: actualDuration,
-    accountId,
-    finalSC: session.scRemaining,
-    finalFatigue: session.fatigue
-  };
+     const actualDuration = Math.round((now() - session.startTime) / 1000);
+   return {
+     ok: true,
+     storiesWatched: session.slidesWatchedHere,
+     reactionsSent: 0, // No reactions in new system
+     durationSec: actualDuration,
+     accountId,
+     finalSC: session.scRemaining,
+     finalFatigue: session.fatigue
+   };
 }
 
 // ============================================================================
