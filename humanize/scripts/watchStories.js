@@ -1,5 +1,23 @@
 // humanize/scripts/watchStories.js
-// Story watching automation with new session-based SC system and progressive decision-making
+// Story watching automation with Progressive Boredom Multiplier (PBM) system
+// and Smart Navigation System
+// 
+// PBM System Overview:
+// - Never exit accounts due to boredom (only session-level exits)
+// - Progressive speed acceleration as boredom grows within accounts
+// - Skip streak acceleration (2% faster per consecutive skip)
+// - Micro outliers (3% chance of slower delays)
+// - Rare slowdowns (7% chance, 2-4 taps, first tap forced Long dwell)
+// - 25% boredom carried over between accounts
+// - Session exits only when SC ≤ 1.0 or fatigue ≥ 1.25
+//
+// Smart Navigation System:
+// - Human-like retry behavior with progressive patience
+// - 4 attempts with varying tap positions and timing
+// - 18-second max time per slide to prevent infinite loops
+// - Graceful fallback: skip problematic stories, not entire accounts
+// - Account-level problem detection (skip account after 3 consecutive failures)
+// - Natural flow preservation without abrupt exits
 
 const { getMood } = require('../moods');
 
@@ -104,15 +122,31 @@ const SC_CONFIG = {
   socialRechargeChance: 0.05,
   socialRechargeBoost: [0.8, 1.4],
   
-  // Account exit
-  boredomExitThreshold: 1.10,
-  boredomExitFatigueThreshold: 0.9,
-  boredomExitScThreshold: 2,
+  // Progressive Boredom Multiplier (PBM) - NEW SYSTEM
+  pbm: {
+    warmUpSlides: 5,           // i0: warm-up window
+    fullRampDepth: 25,         // i1: full ramp depth
+    maxSpeedUp: 0.50,          // s_max: up to 50% faster than baseline
+    skipAcceleration: 0.98,    // ρ: ~2% faster per consecutive skip
+    floor: 0.40,               // m_floor: never faster than 40% of baseline
+    boredomThreshold: 1.10,    // BT: boredom normalization threshold
+    microOutlierChance: 0.03,  // 3% chance of micro slow blips
+    microOutlierRange: [1.1, 1.6], // U[1.1, 1.6] multiplier
+    rareSlowdownChance: 0.07,  // 7% chance per slide when not already slowing
+    rareSlowdownDuration: [2, 4], // 2-4 taps (15% extend to 4-6)
+    rareSlowdownRange: [1.8, 3.0], // U[1.8, 3.0] multiplier
+    rareSlowdownExtendChance: 0.15, // 15% chance to extend to 4-6 taps
+    boredomCarryOver: 0.25     // 25% boredom carried to next account
+  },
   
-  // Navigation
+  // Account exit (REMOVED - no longer used)
+  // boredomExitThreshold: 1.10,
+  // boredomExitFatigueThreshold: 0.9,
+  // boredomExitScThreshold: 2,
+  
+  // Navigation (Smart Navigation System)
   urlChangeTimeout: 1800,
   urlPollInterval: [80, 150],
-  navFlakyCooldown: [1200, 2800],
   betweenAccountsDelay: [600, 2200]
 };
 
@@ -183,6 +217,18 @@ class StorySession {
     this.prevStoryUrl = '';
     this.scSpentHere = 0;
     this.slidesWatchedHere = 0;
+    
+    // PBM state (per-account)
+    this.skipStreak = 0;           // S: consecutive skip streak
+    this.rareSlowdown = {          // Rare slowdown event state
+      active: false,
+      tapsLeft: 0,
+      forcedLongDwell: false       // Whether we need to force Long dwell on first tap
+    };
+    
+    // Smart navigation state (per-account)
+    this.navigationFailures = 0;   // Count of failed navigation attempts
+    this.maxNavigationFailures = 3; // Skip account after 3 consecutive failures
   }
   
   log(message) {
@@ -254,6 +300,79 @@ function sampleDwellValues(category) {
     scCost: rFloat(profile.scCost[0], profile.scCost[1]),
     fatigue: rFloat(profile.fatigue[0], profile.fatigue[1])
   };
+}
+
+// ============================================================================
+// PROGRESSIVE BOREDOM MULTIPLIER (PBM) SYSTEM
+// ============================================================================
+
+function computePBM(session) {
+  const pbm = SC_CONFIG.pbm;
+  
+  // Warm-up window: for i ≤ 5, set PBM = 1.00 (no acceleration)
+  if (session.slideIdx < pbm.warmUpSlides) {
+    return 1.00;
+  }
+  
+  // Normalize boredom and depth
+  const BN_code = clamp(session.boredom / pbm.boredomThreshold, 0, 1);
+  const BN_depth = clamp((session.slideIdx - pbm.warmUpSlides) / (pbm.fullRampDepth - pbm.warmUpSlides), 0, 1);
+  
+  // Fuse them without overshooting
+  const BN_eff = 1 - (1 - BN_code) * (1 - BN_depth);
+  
+  // Turn boredom into speed-up and add streak acceleration
+  const m_bored = 1 - pbm.maxSpeedUp * BN_eff;
+  const m_streak = Math.pow(pbm.skipAcceleration, session.skipStreak);
+  
+  // Clamp to safe range
+  const pbmValue = clamp(m_bored * m_streak, pbm.floor, 1.00);
+  
+  session.log(`[PBM] i=${session.slideIdx}, boredom=${session.boredom.toFixed(2)}, BN_code=${BN_code.toFixed(2)}, BN_depth=${BN_depth.toFixed(2)}, BN_eff=${BN_eff.toFixed(2)}, m_bored=${m_bored.toFixed(2)}, m_streak=${m_streak.toFixed(3)}, PBM=${pbmValue.toFixed(3)}`);
+  
+  return pbmValue;
+}
+
+function shouldTriggerRareSlowdown(session) {
+  const pbm = SC_CONFIG.pbm;
+  
+  // Don't trigger if already in a slowdown
+  if (session.rareSlowdown.active) {
+    return false;
+  }
+  
+  // 7% chance per slide
+  return Math.random() < pbm.rareSlowdownChance;
+}
+
+function startRareSlowdown(session) {
+  const pbm = SC_CONFIG.pbm;
+  
+  // Duration: 2-4 taps (15% extend to 4-6)
+  let duration = rInt(pbm.rareSlowdownDuration[0], pbm.rareSlowdownDuration[1]);
+  if (Math.random() < pbm.rareSlowdownExtendChance) {
+    duration = rInt(4, 6);
+  }
+  
+  session.rareSlowdown.active = true;
+  session.rareSlowdown.tapsLeft = duration;
+  session.rareSlowdown.forcedLongDwell = true; // Force Long dwell on first tap
+  
+  session.log(`[RareSlowdown] Started: ${duration} taps, will force Long dwell on first tap`);
+}
+
+function applyMicroOutlier(baselineDelay, session) {
+  const pbm = SC_CONFIG.pbm;
+  
+  // 3% chance of micro slow blips (only if no slowdown is active)
+  if (Math.random() < pbm.microOutlierChance) {
+    const multiplier = rFloat(pbm.microOutlierRange[0], pbm.microOutlierRange[1]);
+    const newDelay = Math.max(baselineDelay, baselineDelay * multiplier);
+    session.log(`[MicroOutlier] Applied: ${baselineDelay.toFixed(0)}ms → ${newDelay.toFixed(0)}ms (${multiplier.toFixed(2)}x)`);
+    return newDelay;
+  }
+  
+  return baselineDelay;
 }
 
 // ============================================================================
@@ -385,6 +504,160 @@ function computeBAR(session) {
 }
 
 // ============================================================================
+// SMART NAVIGATION SYSTEM
+// ============================================================================
+
+async function smartNavigateToNextSlide(page, session) {
+  const maxTimePerSlide = 18000; // 18 seconds max per slide
+  const startTime = now();
+  let attemptCount = 0;
+  const maxAttempts = 4;
+  
+  session.log(`[SmartNav] Starting intelligent navigation to next slide`);
+  
+  while (attemptCount < maxAttempts && (now() - startTime) < maxTimePerSlide) {
+    attemptCount++;
+    
+    // Human-like variation in retry behavior
+    if (attemptCount > 1) {
+      const thinkingPause = rInt(800, 2000); // Human thinking pause
+      session.log(`[SmartNav] Attempt ${attemptCount}/${maxAttempts} - thinking for ${thinkingPause}ms`);
+      await sleep(thinkingPause);
+    }
+    
+    // Try navigation with human-like variations
+    const navigationSuccess = await attemptHumanLikeNavigation(page, session, attemptCount);
+    
+    if (navigationSuccess.success) {
+      session.log(`[SmartNav] ✅ Success on attempt ${attemptCount} via ${navigationSuccess.method}`);
+      return { success: true, newUrl: navigationSuccess.newUrl, method: navigationSuccess.method };
+    }
+    
+    // Log the failure naturally
+    if (attemptCount < maxAttempts) {
+      session.log(`[SmartNav] ⚠️ Attempt ${attemptCount} failed, will retry naturally`);
+    }
+  }
+  
+  // All attempts failed - time to move on gracefully
+  if (attemptCount >= maxAttempts) {
+    session.log(`[SmartNav] ❌ ${maxAttempts} attempts exhausted, moving on naturally`);
+  } else {
+    session.log(`[SmartNav] ⏰ Time limit reached (${maxTimePerSlide}ms), moving on naturally`);
+  }
+  
+  return { success: false, reason: 'navigation_exhausted' };
+}
+
+async function attemptHumanLikeNavigation(page, session, attemptNumber) {
+  try {
+    // Human-like tap variations based on attempt number
+    const tapVariations = [
+      { x: 0.75, y: 0.5, offset: 15, delay: 90 },      // Standard right-side tap
+      { x: 0.80, y: 0.45, offset: 20, delay: 120 },    // Slightly different position
+      { x: 0.70, y: 0.55, offset: 25, delay: 150 },    // More variation
+      { x: 0.85, y: 0.40, offset: 30, delay: 180 }     // Final attempt with longer delay
+    ];
+    
+    const variation = tapVariations[Math.min(attemptNumber - 1, tapVariations.length - 1)];
+    
+    // Get viewport dimensions
+    const vpDims = await page.evaluate(() => ({ w: innerWidth || 360, h: innerHeight || 640 }));
+    
+    // Calculate tap position with human-like imprecision
+    const baseX = vpDims.w * variation.x;
+    const baseY = vpDims.h * variation.y;
+    
+    // Add natural variation (human imprecision)
+    const finalX = Math.max(1, Math.min(vpDims.w - 2, 
+      baseX + rInt(-variation.offset, variation.offset)));
+    const finalY = Math.max(1, Math.min(vpDims.h - 2, 
+      baseY + rInt(-variation.offset, variation.offset)));
+    
+    session.log(`[SmartNav] Tap attempt ${attemptNumber}: (${finalX}, ${finalY}) with ${variation.delay}ms delay`);
+    
+    // Execute the tap with human-like timing
+    const tapSuccess = await executeHumanLikeTap(page, finalX, finalY, variation.delay);
+    
+    if (!tapSuccess) {
+      return { success: false, reason: 'tap_failed' };
+    }
+    
+    // Wait for URL change with human-like patience
+    const urlChangeResult = await waitForUrlChangeWithPatience(page, session, attemptNumber);
+    
+    if (urlChangeResult.success) {
+      return { 
+        success: true, 
+        newUrl: urlChangeResult.newUrl, 
+        method: `tap_${attemptNumber}_${urlChangeResult.waitTime}ms` 
+      };
+    }
+    
+    return { success: false, reason: 'no_url_change' };
+    
+  } catch (error) {
+    session.log(`[SmartNav] Error in attempt ${attemptNumber}: ${error.message}`);
+    return { success: false, reason: 'error', error: error.message };
+  }
+}
+
+async function executeHumanLikeTap(page, x, y, delayMs) {
+  try {
+    const cdp = await page.target().createCDPSession();
+    
+    // Human-like touch parameters
+    const force = rFloat(0.4, 0.7);
+    const radius = rInt(3, 6);
+    
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ 
+        x: Math.round(x), 
+        y: Math.round(y), 
+        id: 1, 
+        force, 
+        radiusX: radius, 
+        radiusY: radius 
+      }],
+    });
+    
+    await sleep(delayMs);
+    
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await cdp.detach();
+    
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function waitForUrlChangeWithPatience(page, session, attemptNumber) {
+  const startUrl = await page.url();
+  const startTime = now();
+  
+  // Progressive patience: earlier attempts wait less, later attempts wait more
+  const patienceMultiplier = 1 + (attemptNumber * 0.3); // 1.0x, 1.3x, 1.6x, 1.9x
+  const maxWaitTime = Math.min(3000 * patienceMultiplier, 8000); // Cap at 8 seconds
+  
+  while (now() - startTime < maxWaitTime) {
+    // Human-like polling intervals
+    const pollInterval = rInt(100, 200) * patienceMultiplier;
+    await sleep(pollInterval);
+    
+    const currentUrl = await page.url();
+    if (currentUrl !== startUrl) {
+      const waitTime = now() - startTime;
+      session.log(`[SmartNav] URL changed after ${waitTime}ms (attempt ${attemptNumber})`);
+      return { success: true, newUrl: currentUrl, waitTime };
+    }
+  }
+  
+  return { success: false, waitTime: maxWaitTime };
+}
+
+// ============================================================================
 // TOUCH INTERACTIONS
 // ============================================================================
 
@@ -456,7 +729,7 @@ async function storyTapNext(page, session) {
 // STORY NAVIGATION
 // ============================================================================
 
-async function navigateToStories(page, session) {
+async function navigateToStories(page, session, visitedProfiles = new Set()) {
   try {
     session.log(`[Stories] Attempting to navigate to stories...`);
     
@@ -620,6 +893,17 @@ async function navigateToStories(page, session) {
                  });
                  
                  if (!storyInfo.isYourStory) {
+                   // Extract username from aria-label to avoid re-opening same profile
+                   const ariaLabel = storyInfo.ariaLabel;
+                   const usernameMatch = ariaLabel.match(/Story by ([^,]+)/);
+                   const username = usernameMatch ? usernameMatch[1] : `profile_${j}`;
+                   
+                   // Skip if we've already visited this profile
+                   if (visitedProfiles.has(username)) {
+                     session.log(`[Stories] Skipping already visited profile: ${username}`);
+                     continue;
+                   }
+                   
                    storyButton = element;
                    session.log(`[Stories] Using story at index ${j} (viewed: ${storyInfo.isViewed}, unviewed: ${storyInfo.isUnviewed}, aria: "${storyInfo.ariaLabel}")`);
                    break;
@@ -628,10 +912,35 @@ async function navigateToStories(page, session) {
              }
           }
           
-                     // Simple story selection: just use any available story
+                     // Simple story selection: just use any available story (avoiding visited profiles)
            if (!storyButton && storyElements.length > 0) {
-             storyButton = storyElements[0];
-             session.log(`[Stories] Using first available story`);
+             // Find first non-visited profile
+             for (let j = 0; j < storyElements.length; j++) {
+               const element = storyElements[j];
+               const storyInfo = await element.evaluate(el => {
+                 const isYourStory = el.querySelector('img[alt*="profile" i]') && 
+                                   (el.textContent.includes('Your story') || 
+                                    el.getAttribute('aria-label')?.includes('Your story') ||
+                                    el.querySelector('div[data-testid="add-to-story"]'));
+                 const ariaLabel = el.getAttribute('aria-label') || '';
+                 return { isYourStory, ariaLabel };
+               });
+               
+               if (!storyInfo.isYourStory) {
+                 const usernameMatch = storyInfo.ariaLabel.match(/Story by ([^,]+)/);
+                 const username = usernameMatch ? usernameMatch[1] : `profile_${j}`;
+                 
+                 if (!visitedProfiles.has(username)) {
+                   storyButton = element;
+                   session.log(`[Stories] Using first available non-visited story: ${username}`);
+                   break;
+                 }
+               }
+             }
+             
+             if (!storyButton) {
+               session.log(`[Stories] All available profiles have been visited`);
+             }
            }
           
                      if (storyButton) {
@@ -654,7 +963,7 @@ async function navigateToStories(page, session) {
                  await storyButton.click();
                  clickSuccess = true;
                  session.log(`[Stories] Direct click result: success`);
-               } catch (error) {
+        } catch (error) {
                  session.log(`[Stories] Direct click error: ${error.message}`);
                }
              }
@@ -665,7 +974,7 @@ async function navigateToStories(page, session) {
                  await storyButton.evaluate(el => el.click());
                  clickSuccess = true;
                  session.log(`[Stories] JS click result: success`);
-               } catch (error) {
+  } catch (error) {
                  session.log(`[Stories] JS click error: ${error.message}`);
                }
              }
@@ -683,9 +992,19 @@ async function navigateToStories(page, session) {
              const isInStoryView = await isStoryActive(page);
              session.log(`[Stories] Story view detection: ${isInStoryView}`);
              
-             if (isInStoryView) {
+                          if (isInStoryView) {
                session.log(`[Stories] Successfully entered story view`);
-            return true;
+               
+               // Extract username and add to visited profiles
+               const ariaLabel = await storyButton.evaluate(el => el.getAttribute('aria-label') || '');
+               const usernameMatch = ariaLabel.match(/Story by ([^,]+)/);
+               if (usernameMatch) {
+                 const username = usernameMatch[1];
+                 visitedProfiles.add(username);
+                 session.log(`[Stories] Added ${username} to visited profiles (total: ${visitedProfiles.size})`);
+          }
+          
+          return true;
              } else {
                session.log(`[Stories] Failed to enter story view, will try next story`);
                // Try the next story element
@@ -714,8 +1033,8 @@ async function navigateToStories(page, session) {
                }
              }
            }
-          }
-        } catch (error) {
+        }
+      } catch (error) {
         session.log(`[Stories] Selector failed: ${selector} - ${error.message}`);
       }
     }
@@ -1084,32 +1403,28 @@ async function watchStories(page, durationSeconds = 60, accountId = 'unknown') {
    }
    
    let currentUsername = '';
+   let visitedProfiles = new Set(); // Track which profiles we've already visited
    
    // Main loop driven by SC and fatigue only
    while (true) {
     try {
-             // Check session stop conditions (SC and fatigue only - no time-based exits)
-       if (session.scRemaining <= 0) {
-         session.log(`[Session] Ending: SC exhausted (${session.scRemaining.toFixed(2)})`);
+                   // Check session stop conditions (PBM system - only SC and fatigue)
+      if (session.scRemaining <= 1.0) {
+        session.log(`[Session] Ending: SC ≤ 1.0 (${session.scRemaining.toFixed(2)})`);
+        break;
+      }
+      
+      if (session.fatigue >= 1.25) {
+        session.log(`[Session] Ending: fatigue ≥ 1.25 (${session.fatigue.toFixed(3)})`);
       break;
-       }
-       
-       if (session.fatigue >= SC_CONFIG.fatigueHardStop) {
-         session.log(`[Session] Ending: Hard fatigue stop (${session.fatigue.toFixed(3)})`);
-      break;
-       }
-       
-       if (session.fatigue >= SC_CONFIG.fatigueSoftStop && Math.random() < 0.7) {
-         session.log(`[Session] Ending: Soft fatigue stop (${session.fatigue.toFixed(3)})`);
-      break;
-       }
+      }
       
              // Check if we're in a story
        const storyActive = await isStoryActive(page);
        if (!storyActive) {
          session.log(`[Stories] Not in story view, attempting to navigate...`);
          
-         const navSuccess = await navigateToStories(page, session);
+         const navSuccess = await navigateToStories(page, session, visitedProfiles);
          if (!navSuccess) {
            session.log(`[Stories] Navigation failed, retrying in 2-4 seconds...`);
            await sleep(rInt(2000, 4000));
@@ -1146,8 +1461,14 @@ async function watchStories(page, durationSeconds = 60, accountId = 'unknown') {
         
         // Initialize new account
         currentUsername = storyInfo.user;
+        
+        // Carry over 25% boredom to next account (PBM system)
+        const carriedBoredom = session.boredom * SC_CONFIG.pbm.boredomCarryOver;
         session.resetAccountState();
+        session.boredom = carriedBoredom; // Set carried boredom after reset
         session.prevStoryUrl = storyInfo.url;
+        
+        session.log(`[Account] New account: ${currentUsername}, carried boredom: ${carriedBoredom.toFixed(3)}`);
         
         // Maybe start StreakBreaker
         if (session.fatigue <= 0.70 && Math.random() < SC_CONFIG.streakBreakerChance) {
@@ -1176,66 +1497,101 @@ async function watchStories(page, durationSeconds = 60, accountId = 'unknown') {
         session.log(`[Interest] Spike triggered on slide ${session.slideIdx + 1}`);
       }
       
+      // Check for rare slowdown trigger
+      if (shouldTriggerRareSlowdown(session)) {
+        startRareSlowdown(session);
+      }
+      
       // Compute skip propensity
       const pSkip = computeSkipPropensity(session);
       
-                       // Decide skip vs watch
-         if (Math.random() < pSkip) {
-           // Skip
-           session.log(`[Slide] Skipping slide ${session.slideIdx + 1} (pSkip: ${(pSkip * 100).toFixed(1)}%)`);
-           
-           const skipDwell = rFloat(0.2, 0.5);
-           await sleep(skipDwell * 1000);
-           
-           session.boredom += 0.05;
-           session.slideIdx++;
-           
-           // Advance to next slide
-           const tapSuccess = await storyTapNext(page, session);
-           if (tapSuccess) {
-             const newUrl = await waitForUrlChange(page, session);
-             if (newUrl && newUrl !== session.prevStoryUrl) {
-               session.prevStoryUrl = newUrl;
-               session.log(`[Navigation] ✅ Advanced to next slide`);
+      // Decide skip vs watch
+      if (Math.random() < pSkip) {
+        // Skip
+        session.log(`[Slide] Skipping slide ${session.slideIdx + 1} (pSkip: ${(pSkip * 100).toFixed(1)}%)`);
+        
+        // PBM: Compute skip delay with progressive acceleration
+        const baselineDelay = rFloat(200, 500); // Baseline skip delay
+        let skipDelay = baselineDelay;
+        
+        if (session.rareSlowdown.active) {
+          // Rare slowdown override: use 1.8x to 3.0x baseline
+          const slowdownMultiplier = rFloat(SC_CONFIG.pbm.rareSlowdownRange[0], SC_CONFIG.pbm.rareSlowdownRange[1]);
+          skipDelay = baselineDelay * slowdownMultiplier;
+          session.log(`[RareSlowdown] Override: ${baselineDelay.toFixed(0)}ms → ${skipDelay.toFixed(0)}ms (${slowdownMultiplier.toFixed(2)}x)`);
+        } else {
+          // Normal PBM calculation
+          const pbm = computePBM(session);
+          skipDelay = baselineDelay * pbm;
+          
+          // Apply micro outlier (3% chance)
+          skipDelay = applyMicroOutlier(skipDelay, session);
+        }
+        
+        await sleep(skipDelay);
+        
+        // Update PBM state
+        session.boredom += 0.05;
+        session.skipStreak++; // Increment skip streak
+        session.slideIdx++;
+        
+        // Handle rare slowdown decay
+        if (session.rareSlowdown.active) {
+          session.rareSlowdown.tapsLeft--;
+          session.rareSlowdown.forcedLongDwell = false; // Only force on first tap
+          
+          if (session.rareSlowdown.tapsLeft <= 0) {
+            session.rareSlowdown.active = false;
+            session.skipStreak = 0; // Reset streak when slowdown ends
+            session.log(`[RareSlowdown] Ended, reset skip streak`);
     } else {
-               session.log(`[Navigation] ⚠️ URL didn't change, retrying...`);
+            session.log(`[RareSlowdown] ${session.rareSlowdown.tapsLeft} taps remaining`);
+          }
+        }
+           
+                      // Smart navigation with human-like retry behavior
+           const navigationResult = await smartNavigateToNextSlide(page, session);
+           
+           if (navigationResult.success) {
+             session.prevStoryUrl = navigationResult.newUrl;
+             session.slideIdx++;
+             // Reset navigation failure count on success
+             session.navigationFailures = 0;
+           } else {
+             // Navigation failed - track and handle gracefully
+             session.navigationFailures++;
+             session.log(`[SmartNav] ⚠️ Story seems unresponsive (failure ${session.navigationFailures}/${session.maxNavigationFailures})`);
+             
+             // Check if we should skip this account entirely
+             if (session.navigationFailures >= session.maxNavigationFailures) {
+               session.log(`[SmartNav] 🚫 Account seems problematic (${session.navigationFailures} failures), moving to next account`);
                
-               // Retry tap a couple times
-               let retryCount = 0;
-               while (retryCount < 3) {
-                 retryCount++;
-                 await storyTapNext(page, session);
-                 const retryUrl = await waitForUrlChange(page, session);
-                 if (retryUrl && retryUrl !== session.prevStoryUrl) {
-                   session.prevStoryUrl = retryUrl;
-                   session.log(`[Navigation] ✅ Advanced on retry ${retryCount}`);
-      break;
-    }
-  }
-  
-               if (retryCount >= 3) {
-                 session.log(`[Navigation] ❌ Failed to advance after retries, marking nav_flaky`);
-                 
-                 // Exit account with nav_flaky reason (per client requirements)
-                 const exitSuccess = await exitViaCloseButton(page, session);
-                 if (exitSuccess) {
-                   session.logAccountExit(currentUsername, session.slidesWatchedHere, session.scSpentHere, session.scRemaining, session.fatigue, 0, 'nav_flaky');
-                 }
-                 
-                 // Cooldown before next account (per client requirements)
-                 const cooldown = rInt(SC_CONFIG.navFlakyCooldown[0], SC_CONFIG.navFlakyCooldown[1]);
-                 await sleep(cooldown);
-                 
-                 continue;
+               // Exit current account gracefully
+               const exitSuccess = await exitViaCloseButton(page, session);
+               if (exitSuccess) {
+                 session.logAccountExit(currentUsername, session.slidesWatchedHere, session.scSpentHere, session.scRemaining, session.fatigue, 0, 'account_problematic');
                }
+               
+               // Small pause before next account
+               await sleep(rInt(600, 1200));
+               continue;
              }
+             
+             // Small human-like pause before continuing with same account
+             await sleep(rInt(800, 1500));
+             continue;
            }
-      } else {
+  } else {
         // Watch
         session.log(`[Slide] Watching slide ${session.slideIdx + 1} (pSkip: ${(pSkip * 100).toFixed(1)}%)`);
         
-        // Choose dwell category
-        const dwellCategory = chooseDwellCategory(session);
+        // Choose dwell category (force Long if rare slowdown requires it)
+        let dwellCategory = chooseDwellCategory(session);
+        if (session.rareSlowdown.forcedLongDwell) {
+          dwellCategory = 'Long';
+          session.log(`[RareSlowdown] Forcing Long dwell on first tap`);
+        }
+        
         const dwellValues = sampleDwellValues(dwellCategory);
         
         session.log(`[Slide] Dwell: ${dwellCategory} (${dwellValues.duration.toFixed(1)}s)`);
@@ -1263,47 +1619,41 @@ async function watchStories(page, durationSeconds = 60, accountId = 'unknown') {
           session.fatigue = Math.min(1.5, session.fatigue + pauseFatigue);
         }
         
+        // Reset skip streak on watch
+        session.skipStreak = 0;
         session.slideIdx++;
         
-                 // Advance to next slide
-         const tapSuccess = await storyTapNext(page, session);
-         if (tapSuccess) {
-           const newUrl = await waitForUrlChange(page, session);
-           if (newUrl && newUrl !== session.prevStoryUrl) {
-             session.prevStoryUrl = newUrl;
-             session.log(`[Navigation] ✅ Advanced to next slide`);
-      } else {
-             session.log(`[Navigation] ⚠️ URL didn't change, retrying...`);
+                                  // Smart navigation with human-like retry behavior
+         const navigationResult = await smartNavigateToNextSlide(page, session);
+         
+         if (navigationResult.success) {
+           session.prevStoryUrl = navigationResult.newUrl;
+           session.slideIdx++;
+           // Reset navigation failure count on success
+           session.navigationFailures = 0;
+         } else {
+           // Navigation failed - track and handle gracefully
+           session.navigationFailures++;
+           session.log(`[SmartNav] ⚠️ Story seems unresponsive (failure ${session.navigationFailures}/${session.maxNavigationFailures})`);
+           
+           // Check if we should skip this account entirely
+           if (session.navigationFailures >= session.maxNavigationFailures) {
+             session.log(`[SmartNav] 🚫 Account seems problematic (${session.navigationFailures} failures), moving to next account`);
              
-             // Retry tap a couple times
-             let retryCount = 0;
-             while (retryCount < 3) {
-               retryCount++;
-               await storyTapNext(page, session);
-               const retryUrl = await waitForUrlChange(page, session);
-               if (retryUrl && retryUrl !== session.prevStoryUrl) {
-                 session.prevStoryUrl = retryUrl;
-                 session.log(`[Navigation] ✅ Advanced on retry ${retryCount}`);
-        break;
-               }
+             // Exit current account gracefully
+             const exitSuccess = await exitViaCloseButton(page, session);
+             if (exitSuccess) {
+               session.logAccountExit(currentUsername, session.slidesWatchedHere, session.scSpentHere, session.scRemaining, session.fatigue, 0, 'account_problematic');
              }
              
-             if (retryCount >= 3) {
-               session.log(`[Navigation] ❌ Failed to advance after retries, marking nav_flaky`);
-               
-               // Exit account with nav_flaky reason (per client requirements)
-               const exitSuccess = await exitViaCloseButton(page, session);
-               if (exitSuccess) {
-                 session.logAccountExit(currentUsername, session.slidesWatchedHere, session.scSpentHere, session.scRemaining, session.fatigue, 0, 'nav_flaky');
-               }
-               
-               // Cooldown before next account (per client requirements)
-               const cooldown = rInt(SC_CONFIG.navFlakyCooldown[0], SC_CONFIG.navFlakyCooldown[1]);
-               await sleep(cooldown);
-               
-               continue;
-             }
+             // Small pause before next account
+             await sleep(rInt(600, 1200));
+             continue;
            }
+           
+           // Small human-like pause before continuing with same account
+           await sleep(rInt(800, 1500));
+           continue;
          }
       }
       
@@ -1316,32 +1666,9 @@ async function watchStories(page, durationSeconds = 60, accountId = 'unknown') {
         }
       }
       
-      // Account early exit
-      if (session.boredom >= SC_CONFIG.boredomExitThreshold && 
-          (session.fatigue >= SC_CONFIG.boredomExitFatigueThreshold || session.scRemaining <= SC_CONFIG.boredomExitScThreshold)) {
-        session.log(`[Account] Early exit: boredom ${session.boredom.toFixed(2)}, fatigue ${session.fatigue.toFixed(3)}, SC ${session.scRemaining.toFixed(2)}`);
-        
-        const exitSuccess = await exitViaCloseButton(page, session);
-        if (exitSuccess) {
-          const barBoost = computeBAR(session);
-          if (barBoost > 0) {
-            session.scRemaining = Math.min(
-              session.scRemaining + barBoost,
-              session.scStartMode * SC_CONFIG.barHardCapMultiplier
-            );
-            session.barCount++;
-            session.log(`[BAR] Applied: +${barBoost.toFixed(2)} SC (total: ${session.scRemaining.toFixed(2)})`);
-          }
-          
-          session.logAccountExit(currentUsername, session.slidesWatchedHere, session.scSpentHere, session.scRemaining, session.fatigue, barBoost, 'bored_tired');
-        }
-        
-        // Pause before next account
-        const delay = rInt(SC_CONFIG.betweenAccountsDelay[0], SC_CONFIG.betweenAccountsDelay[1]);
-        await sleep(delay);
-        
-        continue;
-      }
+      // PBM: No account-based exits - only session-level exits
+      // Account boredom now drives progressive speed acceleration via PBM
+      // Session continues until SC ≤ 1.0 or fatigue ≥ 1.25
       
       // Small delay between slides
       await sleep(rInt(200, 800));
@@ -1364,13 +1691,11 @@ async function watchStories(page, durationSeconds = 60, accountId = 'unknown') {
        session.log(`[BAR] Applied: +${barBoost.toFixed(2)} SC (total: ${session.scRemaining.toFixed(2)})`);
      }
      
-     // Determine final exit reason
+     // Determine final exit reason (PBM system)
      let finalReason = 'done';
-     if (session.scRemaining <= 0) {
+     if (session.scRemaining <= 1.0) {
        finalReason = 'low_sc';
-     } else if (session.fatigue >= SC_CONFIG.fatigueHardStop) {
-       finalReason = 'fatigue_stop';
-     } else if (session.fatigue >= SC_CONFIG.fatigueSoftStop) {
+     } else if (session.fatigue >= 1.25) {
        finalReason = 'fatigue_stop';
      }
      
@@ -1428,7 +1753,7 @@ async function watchStoriesLegacy(page, durationSeconds = 60, accountId = 'unkno
       await storyTapNext(page, { log: () => {} });
       await sleep(rInt(200, 800));
       
-    } catch (error) {
+  } catch (error) {
       console.log(`[Legacy] Error: ${error.message}`);
       await sleep(1000);
     }
