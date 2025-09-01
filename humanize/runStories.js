@@ -27,6 +27,37 @@ async function main() {
     browser = browserData.browser;
     page = browserData.page;
     
+    // Check for Instagram challenge page (Puppeteer compatible)
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for page to settle
+    const currentUrl = await page.url();
+    
+    if (currentUrl.includes('/challenge/') || currentUrl.includes('challenged')) {
+      console.log('🚨 Instagram Challenge Page Detected!');
+      console.log('📋 Current URL:', currentUrl);
+      console.log('⚠️  Manual intervention required:');
+      console.log('   1. Click "Dismiss" button in the browser');
+      console.log('   2. Complete any verification steps');
+      console.log('   3. Wait for normal Instagram feed to load');
+      console.log('   4. Re-run the script');
+      console.log('');
+      console.log('💡 This usually happens when:');
+      console.log('   - Account needs more organic activity');
+      console.log('   - Running too many automated sessions');
+      console.log('   - Profile needs warm-up period');
+      return;
+    }
+    
+    // Check for other Instagram blocks
+    const pageContent = await page.evaluate(() => document.body.textContent).catch(() => '');
+    if (pageContent.includes('automated behavior') || pageContent.includes('suspicious activity')) {
+      console.log('🚨 Instagram has detected automated behavior!');
+      console.log('📋 Page content indicates challenge/block');
+      console.log('⚠️  Please handle manually in browser and try again');
+      return;
+    }
+    
+    console.log('✅ Instagram loaded normally, proceeding with story watching...');
+    
     // Run story watching
     const result = await watchStories(page, durationSeconds, profileId);
     

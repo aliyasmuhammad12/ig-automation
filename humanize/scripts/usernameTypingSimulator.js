@@ -8,6 +8,7 @@
  */
 
 const { delay } = require('../../helpers/utils');
+const { mobileClick } = require('../../helpers/mobileClick');
 
 // ============================================================================
 // PERSONA DEFINITIONS
@@ -324,14 +325,24 @@ class UsernameTypingSimulator {
    * Prepare input field for typing
    */
   async prepareInput(page, selector) {
-    await page.evaluate((sel) => {
-      const input = document.querySelector(sel);
-      if (input) {
-        input.value = '';
-        input.focus();
-        input.click();
-      }
-    }, selector);
+    // Use mobile-appropriate click instead of center-clicking
+    const clickSuccess = await mobileClick(page, selector, {
+      waitForVisible: true,
+      timeout: 5000,
+      scrollIntoView: true,
+      useTouch: true,
+      addDelay: true
+    });
+    
+    if (clickSuccess) {
+      await page.evaluate((sel) => {
+        const input = document.querySelector(sel);
+        if (input) {
+          input.value = '';
+          input.focus();
+        }
+      }, selector);
+    }
     
     await delay(100 + Math.random() * 200);
   }

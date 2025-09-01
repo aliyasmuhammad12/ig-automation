@@ -209,10 +209,13 @@ async function dispatchAdvancedSwipe(client, pathInfo, sessionState) {
  *  - sessionOverride : override session parameters
  */
 async function swipeNext(page, options = {}) {
-  // Derive viewport
-  const vp = page.viewport() || { width: 360, height: 640, isMobile: true, hasTouch: true };
-  const vw = vp.width || 360;
-  const vh = vp.height || 640;
+  // 🔍 Use AdsPower's native viewport (no overrides)
+  const vp = page.viewport();
+  if (!vp) {
+    throw new Error('No viewport detected - AdsPower must provide viewport configuration');
+  }
+  const vw = vp.width;
+  const vh = vp.height;
 
   // Try to start over the video region if possible
   let startX = options.startX, startY = options.startY;

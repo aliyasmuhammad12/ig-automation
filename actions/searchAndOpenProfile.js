@@ -1,22 +1,32 @@
 const { delay } = require('../helpers/utils');
+const { mobileClick, mobileClickEval } = require('../helpers/mobileClick');
+const UsernameTypingSimulator = require('../humanize/scripts/usernameTypingSimulator');
 const config = require('../config');
-const { UsernameTypingSimulator } = require('../humanize/scripts/usernameTypingSimulator');
 
 async function clickSearchIcon(page) {
   const anchorSel = 'a[href="/explore/"]';
-  const svgSel = 'svg[aria-label="Explore"]';
+  const svgSel = 'svg[aria-label="Search"]';
 
   try {
     console.log('[clickSearchIcon] ⏳ Waiting for anchor:', anchorSel);
     await page.waitForSelector(anchorSel, { visible: true, timeout: 30000 });
     console.log('[clickSearchIcon] ✅ Found anchor, clicking...');
-    await page.$eval(anchorSel, el => {
-      el.scrollIntoView({ block: 'center' });
-      el.click();
+    
+    // Use mobile-appropriate click instead of center-clicking
+    const clickSuccess = await mobileClick(page, anchorSel, {
+      waitForVisible: false, // Already waited above
+      scrollIntoView: true,
+      useTouch: true,
+      addDelay: true
     });
-    await delay(3000);
-    console.log('[clickSearchIcon] ✅ Clicked anchor');
-    return true;
+    
+    if (clickSuccess) {
+      await delay(3000);
+      console.log('[clickSearchIcon] ✅ Clicked anchor');
+      return true;
+    } else {
+      throw new Error('Mobile click failed');
+    }
   } catch (err) {
     console.warn('[clickSearchIcon] ❌ Anchor not found or clickable:', err.message);
   }
@@ -24,10 +34,28 @@ async function clickSearchIcon(page) {
   try {
     console.log('[clickSearchIcon] ⏳ Trying fallback SVG:', svgSel);
     await page.waitForSelector(svgSel, { visible: true, timeout: 5000 });
-    await page.$eval(svgSel, el => el.closest('a')?.click());
-    await delay(3000);
-    console.log('[clickSearchIcon] ✅ Clicked fallback SVG');
-    return true;
+    
+    // Use mobile-appropriate click for SVG fallback
+    const clickSuccess = await mobileClickEval(page, svgSel, (el) => {
+      const link = el.closest('a');
+      if (link) {
+        link.click();
+        return true;
+      }
+      return false;
+    }, {
+      waitForVisible: false,
+      scrollIntoView: true,
+      addDelay: true
+    });
+    
+    if (clickSuccess) {
+      await delay(3000);
+      console.log('[clickSearchIcon] ✅ Clicked fallback SVG');
+      return true;
+    } else {
+      throw new Error('Mobile click failed');
+    }
   } catch (err2) {
     console.error('[clickSearchIcon] ❌ Fallback SVG click failed:', err2.message);
   }
@@ -71,12 +99,21 @@ async function clearSearchBar(page, inputSel) {
     console.log('[clearSearchBar] ⏳ Looking for clear button...');
     await page.waitForSelector(clearBtnSel, { visible: true, timeout: 5000 });
     console.log('[clearSearchBar] ✅ Found clear button, clicking...');
-    await page.$eval(clearBtnSel, el => {
-      el.scrollIntoView({ block: 'center' });
-      el.click();
+    
+    // Use mobile-appropriate click instead of center-clicking
+    const clickSuccess = await mobileClick(page, clearBtnSel, {
+      waitForVisible: false,
+      scrollIntoView: true,
+      useTouch: true,
+      addDelay: true
     });
-    await delay(1000);
-    console.log('[clearSearchBar] ✅ Clicked clear button.');
+    
+    if (clickSuccess) {
+      await delay(1000);
+      console.log('[clearSearchBar] ✅ Clicked clear button.');
+    } else {
+      console.warn('[clearSearchBar] ⚠️ Mobile click failed');
+    }
   } catch (err) {
     console.warn('[clearSearchBar] ❌ Clear button not found or failed to click:', err.message);
   }
@@ -126,10 +163,17 @@ async function searchAndOpenProfile(page, username) {
       const profileSelector = `li a[href="/${cleanUsername}/"]`;
       await page.waitForSelector(profileSelector, { visible: true, timeout: 10000 });
 
-      await page.$eval(profileSelector, el => {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          el.click();
-        });
+      // Use mobile-appropriate click instead of center-clicking
+      const profileClickSuccess = await mobileClick(page, profileSelector, {
+        waitForVisible: false,
+        scrollIntoView: true,
+        useTouch: true,
+        addDelay: true
+      });
+      
+      if (!profileClickSuccess) {
+        throw new Error('Failed to click profile link');
+      }
 
       await delay(5000);
       return true;
@@ -151,6 +195,18 @@ async function searchAndOpenProfile(page, username) {
 
 
           await clickSearchIcon(page);
+
+          // Use mobile-appropriate click instead of center-clicking
+          const homeClickSuccess = await mobileClick(page, homeSelector, {
+            waitForVisible: false,
+            scrollIntoView: true,
+            useTouch: true,
+            addDelay: true
+          });
+          
+          if (!homeClickSuccess) {
+            throw new Error('Failed to click home link');
+          }
 
           continue; // retry next attempt
         } catch (fallbackErr) {

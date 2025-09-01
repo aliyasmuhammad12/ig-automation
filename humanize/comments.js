@@ -1,4 +1,5 @@
 const { swipeNext } = require('./scripts/humanSwipe');
+const { mobileClick } = require('../helpers/mobileClick');
 
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 const rFloat = (a, b) => a + Math.random() * (b - a);
@@ -53,20 +54,37 @@ async function ensureCommentsOpen(page) {
   try {
     const already = await page.$('div[role="dialog"]');
     if (already) return { opened: true, closeSel };
-    const btn = await page.$(openSel);
-    if (!btn) return { opened: false };
-    await btn.click({ delay: rInt(15, 45) });
-    await sleep(rInt(250, 600));
-    await page.waitForSelector('div[role="dialog"]', { visible: true, timeout: 5000 });
-    return { opened: true, closeSel };
+    
+    // Use mobile-appropriate click instead of center-clicking
+    const clickSuccess = await mobileClick(page, openSel, {
+      waitForVisible: true,
+      timeout: 5000,
+      scrollIntoView: true,
+      useTouch: true,
+      addDelay: true
+    });
+    
+    if (clickSuccess) {
+      await sleep(rInt(250, 600));
+      await page.waitForSelector('div[role="dialog"]', { visible: true, timeout: 5000 });
+      return { opened: true, closeSel };
+    } else {
+      return { opened: false };
+    }
   } catch { return { opened: false }; }
 }
 
 async function closeComments(page) {
   const closeSel = 'div[role="dialog"] button[aria-label="Close"], svg[aria-label="Close"]';
   try {
-    const el = await page.$(closeSel);
-    if (el) await el.click({ delay: rInt(10, 40) });
+    // Use mobile-appropriate click instead of center-clicking
+    await mobileClick(page, closeSel, {
+      waitForVisible: true,
+      timeout: 3000,
+      scrollIntoView: true,
+      useTouch: true,
+      addDelay: true
+    });
   } catch {}
 }
 
@@ -113,7 +131,16 @@ async function likeVisibleComments(page, mood) {
         let waitSec = pickWeighted(0.8, 10, 2.2);
         if (Math.random() < extremeP) waitSec = rFloat(60, 240);
         await sleep(waitSec * 1000);
-        try { await el.click({ delay: rInt(20, 60) }); likes++; } catch {}
+        try { 
+          // Use mobile-appropriate click instead of center-clicking
+          const likeClickSuccess = await mobileClick(page, el, {
+            waitForVisible: false,
+            scrollIntoView: true,
+            useTouch: true,
+            addDelay: true
+          });
+          if (likeClickSuccess) likes++;
+        } catch {}
       }
     }
   } catch {}

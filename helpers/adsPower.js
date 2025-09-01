@@ -26,6 +26,46 @@ async function launchAdsPowerBrowser(profileId, port = 50325) {
       timeout: 90000
     });
 
+    // 🔍 PASSIVE DETECTION: Check Instagram layout without changing anything
+    console.log(`[AdsPower] Detecting Instagram layout (passive - no changes)...`);
+    const layoutInfo = await page.evaluate(() => {
+      // Check for mobile vs desktop indicators (read-only)
+      const mobileIndicators = [
+        'div[role="button"]:has(circle[stroke*="url"])', // Mobile story circles
+        'div[role="button"]:has(circle[stroke*="gradient"])', // Mobile story gradients
+        'div[data-testid="mobile-nav-bar"]', // Mobile navigation
+        'div[data-testid="mobile-bottom-nav"]' // Mobile bottom nav
+      ];
+      
+      const desktopIndicators = [
+        'aside[role="complementary"]', // Desktop sidebar
+        'nav[aria-label="Primary navigation"]', // Desktop nav
+        'div[data-testid="desktop-nav"]' // Desktop nav
+      ];
+      
+      const hasMobile = mobileIndicators.some(sel => document.querySelector(sel));
+      const hasDesktop = desktopIndicators.some(sel => document.querySelector(sel));
+      
+      return {
+        hasMobile,
+        hasDesktop,
+        windowWidth: window.innerWidth,
+        windowHeight: window.innerHeight,
+        url: window.location.href
+      };
+    });
+    
+    // Report layout detection (passive - no changes made)
+    if (layoutInfo.hasMobile && !layoutInfo.hasDesktop) {
+      console.log('✅ Instagram serving MOBILE layout (AdsPower mobile emulation working)');
+    } else if (layoutInfo.hasDesktop && !layoutInfo.hasMobile) {
+      console.log('⚠️ Instagram serving DESKTOP layout (AdsPower may need mobile configuration)');
+    } else {
+      console.log('❓ Instagram layout unclear (mixed indicators)');
+    }
+    
+    console.log(`[Layout] Window: ${layoutInfo.windowWidth}x${layoutInfo.windowHeight}, URL: ${layoutInfo.url}`);
+
     const extraDelay = 2240 + Math.floor(Math.random() * (6940 - 2240));
     console.log(`[AdsPower] Waiting extra ${extraDelay}ms after navigation...`);
     await delay(extraDelay);

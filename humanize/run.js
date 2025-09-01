@@ -3,6 +3,7 @@
 
 const { ADSPOWER_API_PORT } = require('../config');
 const { launchAdsPowerBrowser } = require('../helpers/adsPower');
+const { mobileClick } = require('../helpers/mobileClick');
 const task = require('./scripts/watchReels');
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -21,17 +22,12 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const { browser, page } = await launchAdsPowerBrowser(profileId, ADSPOWER_API_PORT);
 
   try {
-    // Get the actual viewport from AdsPower browser instead of overriding it
+    // 🔍 PASSIVE DETECTION: Only report what AdsPower provides (don't change anything)
     const currentViewport = page.viewport();
-    console.log(`📱 AdsPower browser viewport: ${currentViewport?.width || 'unknown'}x${currentViewport?.height || 'unknown'}`);
+    console.log(`📱 AdsPower profile configuration: ${currentViewport?.width || 'unknown'}x${currentViewport?.height || 'unknown'} (mobile: ${currentViewport?.isMobile || false})`);
     
-    // Only set viewport if it's not already configured by AdsPower
-    if (!currentViewport || !currentViewport.width || !currentViewport.height) {
-      console.log('⚠️ No viewport detected, setting default mobile viewport');
-      await page.setViewport({ width: 390, height: 844, isMobile: true, deviceScaleFactor: 2 });
-    } else {
-      console.log('✅ Using AdsPower browser resolution');
-    }
+    // 🚫 NO VIEWPORT OVERRIDES - Let AdsPower handle everything
+    console.log('✅ Using AdsPower native configuration (no overrides)');
 
     console.log('🌐 Navigating to Instagram Reels…');
     try {
@@ -43,7 +39,15 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
         // Try clicking the Reels tab/link if present
         const reelsSel = 'a[role="link"][href*="/reels/"], svg[aria-label="Reels"]';
         await page.waitForSelector(reelsSel, { visible: true, timeout: 10000 }).catch(() => {});
-        await page.$eval(reelsSel, el => (el.closest('a') || el).click()).catch(() => {});
+        
+        // Use mobile-appropriate click instead of center-clicking
+        await mobileClick(page, reelsSel, {
+          waitForVisible: false,
+          timeout: 5000,
+          scrollIntoView: true,
+          useTouch: true,
+          addDelay: true
+        }).catch(() => {});
       } catch {}
     }
 

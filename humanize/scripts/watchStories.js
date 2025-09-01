@@ -20,6 +20,7 @@
 // - Natural flow preservation without abrupt exits
 
 const { getMood } = require('../moods');
+const { mobileClick } = require('../../helpers/mobileClick');
 
 const now = () => Date.now();
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
@@ -661,11 +662,6 @@ async function waitForUrlChangeWithPatience(page, session, attemptNumber) {
 // TOUCH INTERACTIONS
 // ============================================================================
 
-async function enableTouchEmulation(page) {
-  const cdp = await page.target().createCDPSession();
-  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true });
-}
-
 async function touchTapAt(page, x, y, opts = {}) {
   const { force = 0.55, radius = 4, delayMs = 90 } = opts;
   try {
@@ -957,14 +953,24 @@ async function navigateToStories(page, session, visitedProfiles = new Set()) {
                session.log(`[Stories] Touch tap error: ${error.message}`);
              }
              
-             // Method 2: Direct click if touch failed
+             // Method 2: Mobile click if touch failed
              if (!clickSuccess) {
                try {
-                 await storyButton.click();
-                 clickSuccess = true;
-                 session.log(`[Stories] Direct click result: success`);
-        } catch (error) {
-                 session.log(`[Stories] Direct click error: ${error.message}`);
+                 const mobileClickSuccess = await mobileClick(page, storyButton, {
+                   waitForVisible: false,
+                   scrollIntoView: true,
+                   useTouch: true,
+                   addDelay: true
+                 });
+                 
+                 if (mobileClickSuccess) {
+                   clickSuccess = true;
+                   session.log(`[Stories] Mobile click result: success`);
+                 } else {
+                   session.log(`[Stories] Mobile click result: failed`);
+                 }
+               } catch (error) {
+                 session.log(`[Stories] Mobile click error: ${error.message}`);
                }
              }
              
@@ -974,7 +980,7 @@ async function navigateToStories(page, session, visitedProfiles = new Set()) {
                  await storyButton.evaluate(el => el.click());
                  clickSuccess = true;
                  session.log(`[Stories] JS click result: success`);
-  } catch (error) {
+               } catch (error) {
                  session.log(`[Stories] JS click error: ${error.message}`);
                }
              }
@@ -1302,23 +1308,33 @@ async function exitViaCloseButton(page, session) {
               session.log(`[Exit] ⚠️ Touch tap failed: ${error.message}`);
             }
             
-            // Method 2: Direct click if touch failed
+            // Method 2: Mobile click if touch failed
             try {
-              await elementToClick.click();
-              await sleep(rInt(300, 500));
-              
-              const backToFeed = await page.evaluate(() => {
-                return !document.querySelector('div[role="dialog"]') && 
-                       window.location.href.includes('instagram.com') &&
-                       !window.location.href.includes('/stories/');
+              const mobileClickSuccess = await mobileClick(page, elementToClick, {
+                waitForVisible: false,
+                scrollIntoView: true,
+                useTouch: true,
+                addDelay: true
               });
               
-              if (backToFeed) {
-                session.log(`[Exit] ✅ Success via close button direct click (selector: ${selector})`);
-                return true;
+              if (mobileClickSuccess) {
+                await sleep(rInt(300, 500));
+                
+                const backToFeed = await page.evaluate(() => {
+                  return !document.querySelector('div[role="dialog"]') && 
+                         window.location.href.includes('instagram.com') &&
+                         !window.location.href.includes('/stories/');
+                });
+                
+                if (backToFeed) {
+                  session.log(`[Exit] ✅ Success via close button mobile click (selector: ${selector})`);
+                  return true;
+                }
+              } else {
+                session.log(`[Exit] ⚠️ Mobile click failed: ${selector}`);
               }
             } catch (error) {
-              session.log(`[Exit] ⚠️ Direct click failed: ${error.message}`);
+              session.log(`[Exit] ⚠️ Mobile click error: ${error.message}`);
             }
             
             // Method 3: JavaScript click as last resort
@@ -1392,8 +1408,7 @@ async function watchStories(page, durationSeconds = 60, accountId = 'unknown') {
      // Initialize session
    const session = new StorySession(accountId, durationSeconds);
    
-   // Enable touch emulation
-   await enableTouchEmulation(page);
+     // 🚫 REMOVED: enableTouchEmulation - Let AdsPower handle touch settings natively
    
    // Navigate to stories
    const navigationSuccess = await navigateToStories(page, session);
@@ -1519,7 +1534,7 @@ async function watchStories(page, durationSeconds = 60, accountId = 'unknown') {
           const slowdownMultiplier = rFloat(SC_CONFIG.pbm.rareSlowdownRange[0], SC_CONFIG.pbm.rareSlowdownRange[1]);
           skipDelay = baselineDelay * slowdownMultiplier;
           session.log(`[RareSlowdown] Override: ${baselineDelay.toFixed(0)}ms → ${skipDelay.toFixed(0)}ms (${slowdownMultiplier.toFixed(2)}x)`);
-        } else {
+    } else {
           // Normal PBM calculation
           const pbm = computePBM(session);
           skipDelay = baselineDelay * pbm;
@@ -1631,7 +1646,7 @@ async function watchStories(page, durationSeconds = 60, accountId = 'unknown') {
            session.slideIdx++;
            // Reset navigation failure count on success
            session.navigationFailures = 0;
-         } else {
+      } else {
            // Navigation failed - track and handle gracefully
            session.navigationFailures++;
            session.log(`[SmartNav] ⚠️ Story seems unresponsive (failure ${session.navigationFailures}/${session.maxNavigationFailures})`);
@@ -1673,7 +1688,7 @@ async function watchStories(page, durationSeconds = 60, accountId = 'unknown') {
       // Small delay between slides
       await sleep(rInt(200, 800));
       
-  } catch (error) {
+      } catch (error) {
       session.log(`[Stories] Error in story loop: ${error.message}`);
       await sleep(1000);
     }
@@ -1725,7 +1740,7 @@ async function watchStoriesLegacy(page, durationSeconds = 60, accountId = 'unkno
   const startTime = now();
   const endTime = startTime + (durationSeconds * 1000);
   
-  await enableTouchEmulation(page);
+  // 🚫 REMOVED: enableTouchEmulation - Let AdsPower handle touch settings natively
   
   const navigationSuccess = await navigateToStories(page, { log: console.log });
   if (!navigationSuccess) {

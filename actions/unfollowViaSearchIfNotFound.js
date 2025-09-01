@@ -1,22 +1,46 @@
 const { delay } = require('../helpers/utils');
+const { mobileClick, mobileClickEval } = require('../helpers/mobileClick');
 const { searchAndOpenProfile } = require('./searchAndOpenProfile');
 const { clickProfileIcon, clickFollowingLink } = require('../helpers/instagramNavigation');
 
 async function clickHomeButton(page) {
   try {
     const homeIconSelector = 'svg[aria-label="Home"], svg[aria-label="Domov"], svg[aria-label="Inicio"]';
-    const homeIcon = await page.$(homeIconSelector);
-    if (homeIcon) {
-      await homeIcon.evaluate(el => el.closest('a,button')?.click());
+    
+    // Try mobile click for home icon
+    const homeClickSuccess = await mobileClickEval(page, homeIconSelector, (el) => {
+      const link = el.closest('a,button');
+      if (link) {
+        link.click();
+        return true;
+      }
+      return false;
+    }, {
+      waitForVisible: true,
+      timeout: 5000,
+      scrollIntoView: true,
+      addDelay: true
+    });
+    
+    if (homeClickSuccess) {
       await delay(1500 + Math.random() * 500);
       return true;
     }
-    const logoLink = await page.$('a[href="/"]');
-    if (logoLink) {
-      await logoLink.click();
+    
+    // Fallback to logo link
+    const logoClickSuccess = await mobileClick(page, 'a[href="/"]', {
+      waitForVisible: true,
+      timeout: 5000,
+      scrollIntoView: true,
+      useTouch: true,
+      addDelay: true
+    });
+    
+    if (logoClickSuccess) {
       await delay(1500 + Math.random() * 500);
       return true;
     }
+    
     console.warn('[clickHomeButton] ⚠️ Could not find Home button.');
     return false;
   } catch (err) {
@@ -47,25 +71,44 @@ async function unfollowViaSearchIfNotFound(page, username, myUsername) {
           const labelDiv = btn.querySelector('div._ap3a');
           const labelText = labelDiv?.innerText?.trim().toLowerCase();
           if (['requested', 'following', 'zrušiť sledovanie', 'zrušené'].includes(labelText)) {
-            btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            btn.click();
-            return { success: true, message: `Clicked "${labelText}" button` };
+            return { success: true, message: `Found "${labelText}" button`, buttonSelector: 'button._aswp._aswr._asws._aswv._asw_._asx2' };
           }
         }
         return { success: false, message: 'No matching "Requested"/"Following" button found' };
       });
 
       if (result.success) {
-        await delay(300 + Math.random() * 600);
-        const confirmBtnSel = 'button._a9--._a9-_';
-        try {
-          await page.waitForSelector(confirmBtnSel, { visible: true, timeout: 5000 });
-          await page.$eval(confirmBtnSel, el => el.click());
-          console.log(`[unfollowViaSearchIfNotFound] ✅ Confirmed unfollow for @${cleanUsername}`);
-          clicked = true;
-          break;
-        } catch {
-          console.warn(`[unfollowViaSearchIfNotFound] ⚠️ Confirm button not found after click`);
+        // Use mobile-appropriate click instead of center-clicking
+        const clickSuccess = await mobileClick(page, result.buttonSelector, {
+          waitForVisible: true,
+          timeout: 10000,
+          scrollIntoView: true,
+          useTouch: true,
+          addDelay: true
+        });
+        
+        if (clickSuccess) {
+          await delay(300 + Math.random() * 600);
+          const confirmBtnSel = 'button._a9--._a9-_';
+          
+          // Use mobile-appropriate click for confirmation
+          const confirmClickSuccess = await mobileClick(page, confirmBtnSel, {
+            waitForVisible: true,
+            timeout: 5000,
+            scrollIntoView: true,
+            useTouch: true,
+            addDelay: true
+          });
+          
+          if (confirmClickSuccess) {
+            console.log(`[unfollowViaSearchIfNotFound] ✅ Confirmed unfollow for @${cleanUsername}`);
+            clicked = true;
+            break;
+          } else {
+            console.warn(`[unfollowViaSearchIfNotFound] ⚠️ Confirm button click failed`);
+          }
+        } else {
+          console.warn(`[unfollowViaSearchIfNotFound] ⚠️ Mobile click failed on attempt ${attempt + 1}`);
         }
       } else {
         console.warn(`[unfollowViaSearchIfNotFound] ⚠️ Retry ${attempt + 1}: ${result.message}`);

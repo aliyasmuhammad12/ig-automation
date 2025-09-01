@@ -1,8 +1,9 @@
 const { delay } = require('../helpers/utils');
+const { mobileClick, mobileClickEval } = require('../helpers/mobileClick');
 const { searchAndOpenProfile } = require('./searchAndOpenProfile');
 
 async function followUser(page, username) {
-  console.log(`[FollowUser] Attempting to follow: ${username}`);
+  console.log(`[FollowUser] 🔍 Attempting to follow: ${username}`);
 
   const found = await searchAndOpenProfile(page, username);
   if (!found) {
@@ -31,9 +32,7 @@ async function followUser(page, username) {
           btn = btn.parentElement;
         }
         if (btn) {
-          btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          btn.click();
-          return { success: true, message: 'Clicked follow button' };
+          return { success: true, element: btn.outerHTML, message: 'Found follow button' };
         }
         return { success: false, message: 'Found follow text but no clickable button' };
       }
@@ -42,6 +41,21 @@ async function followUser(page, username) {
     });
 
     if (result.success) {
+      // Use mobile-appropriate click instead of center-clicking
+      const clickSuccess = await mobileClick(page, 'button._aswp._aswr._aswu._asw_._asx2, div._ap3a._aaco._aacw._aad6._aade', {
+        waitForVisible: true,
+        timeout: 10000,
+        scrollIntoView: true,
+        useTouch: true,
+        addDelay: true
+      });
+
+      if (!clickSuccess) {
+        console.warn(`[FollowUser] Mobile click failed on attempt ${attempt + 1}`);
+        await delay(2000);
+        continue;
+      }
+
       // Wait longer to allow UI state to update
       await delay(5000);
 

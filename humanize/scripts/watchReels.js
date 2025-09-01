@@ -4,16 +4,14 @@
 const { swipeNext } = require('./humanSwipe');
 const { getMood } = require('../moods');
 const { handleCommentsFlow } = require('../comments');
+const { mobileClick } = require('../../helpers/mobileClick');
 
 const now = () => Date.now();
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 const rFloat = (a, b) => a + Math.random() * (b - a);
 const rInt = (a, b) => Math.floor(rFloat(a, b + 1));
 
-async function enableTouchEmulation(page) {
-  const cdp = await page.target().createCDPSession();
-  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true });
-}
+// 🚫 REMOVED: enableTouchEmulation - Let AdsPower handle touch settings natively
 
 async function killCommonBlockers(page) {
   const sels = [
@@ -24,8 +22,18 @@ async function killCommonBlockers(page) {
   ];
   for (const sel of sels) {
     try {
-      const el = await page.$(sel);
-      if (el) { await el.click({ delay: rInt(15, 45) }); await sleep(rInt(120, 240)); }
+      // Use mobile-appropriate click instead of center-clicking
+      const clickSuccess = await mobileClick(page, sel, {
+        waitForVisible: true,
+        timeout: 3000,
+        scrollIntoView: true,
+        useTouch: true,
+        addDelay: true
+      });
+      
+      if (clickSuccess) {
+        await sleep(rInt(120, 240));
+      }
     } catch {}
   }
 }
@@ -76,9 +84,20 @@ async function likeIfPossible(page) {
     'svg[height][width][role="img"][aria-label="Like"]',
   ];
   for (const sel of selectors) {
-    const el = await page.$(sel);
-    if (!el) continue;
-    try { await el.click({ delay: rInt(10, 60) }); return true; } catch {}
+    try {
+      // Use mobile-appropriate click instead of center-clicking
+      const clickSuccess = await mobileClick(page, sel, {
+        waitForVisible: true,
+        timeout: 3000,
+        scrollIntoView: true,
+        useTouch: true,
+        addDelay: true
+      });
+      
+      if (clickSuccess) {
+        return true;
+      }
+    } catch {}
   }
   return false;
 }
@@ -87,25 +106,51 @@ async function maybeGlanceComments(page) {
   const openSel  = 'svg[aria-label="Comment"], button[aria-label="Comment"]';
   const closeSel = 'div[role="dialog"] button[aria-label="Close"], svg[aria-label="Close"]';
   try {
-    const btn = await page.$(openSel);
-    if (!btn) return false;
-    await btn.click({ delay: rInt(15, 50) });
-    await sleep(rInt(350, 900));
-    const close = await page.$(closeSel);
-    if (close) { await close.click({ delay: rInt(15, 50) }); }
-    return true;
+    // Use mobile-appropriate click for opening comments
+    const openClickSuccess = await mobileClick(page, openSel, {
+      waitForVisible: true,
+      timeout: 5000,
+      scrollIntoView: true,
+      useTouch: true,
+      addDelay: true
+    });
+    
+    if (openClickSuccess) {
+      await sleep(rInt(350, 900));
+      
+      // Use mobile-appropriate click for closing comments
+      await mobileClick(page, closeSel, {
+        waitForVisible: true,
+        timeout: 3000,
+        scrollIntoView: true,
+        useTouch: true,
+        addDelay: true
+      });
+      
+      return true;
+    }
+    return false;
   } catch { return false; }
 }
 
 async function maybePeekProfile(page) {
   const sel = 'header a[role="link"][href*="/"], a[role="link"] img[alt*=" profile picture"]';
   try {
-    const el = await page.$(sel);
-    if (!el) return false;
-    await el.click({ delay: rInt(15, 45) });
-    await sleep(rInt(400, 900));
-    await page.keyboard.press('Escape').catch(() => {});
-    return true;
+    // Use mobile-appropriate click instead of center-clicking
+    const clickSuccess = await mobileClick(page, sel, {
+      waitForVisible: true,
+      timeout: 5000,
+      scrollIntoView: true,
+      useTouch: true,
+      addDelay: true
+    });
+    
+    if (clickSuccess) {
+      await sleep(rInt(400, 900));
+      await page.keyboard.press('Escape').catch(() => {});
+      return true;
+    }
+    return false;
   } catch { return false; }
 }
 
@@ -244,7 +289,6 @@ module.exports = {
     };
 
     await sleep(rInt(500, 1400));
-    await enableTouchEmulation(page);
     await killCommonBlockers(page).catch(() => {});
     await ensureReelFocused(page);
 

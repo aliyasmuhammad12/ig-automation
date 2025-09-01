@@ -1,6 +1,6 @@
 const path = require('path');
-const { delay, timestamp } = require('../helpers/utils');
-const { readJSON, writeJSON, ensureDirectory } = require('../helpers/files');
+const { delay, timestamp, readJSON, writeJSON } = require('../helpers/utils');
+const { mobileClick, mobileClickEval } = require('../helpers/mobileClick');
 const { unfollowViaSearchIfNotFound } = require('../actions/unfollowViaSearchIfNotFound');
 
 async function unfollowUsers(page, profileId, username, limit) {
@@ -8,7 +8,7 @@ async function unfollowUsers(page, profileId, username, limit) {
   const followedPath = path.join(logsDir, 'followed.json');
   const unfollowedPath = path.join(logsDir, 'unfollowed.json');
 
-  ensureDirectory(logsDir);
+  // ensureDirectory(logsDir); // This line is removed as per the new_code, as ensureDirectory is no longer imported.
 
   let followedLog = readJSON(followedPath) || [];
   const unfollowedLog = readJSON(unfollowedPath) || [];
@@ -52,18 +52,30 @@ async function unfollowUsers(page, profileId, username, limit) {
             return { success: false, message: 'Unfollow button not found for ' + username };
           }
 
-          button.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          button.click();
-          return { success: true, message: 'Clicked unfollow for ' + username };
+          return { success: true, message: 'Found unfollow button for ' + username, buttonSelector: 'button._aswp._aswr._aswv._asw_._asx2' };
         }
 
         return { success: false, message: 'No matching container found for ' + username };
       }, target);
 
       if (result.success) {
-        console.log(`[UnfollowUsers] ✅ ${result.message}`);
-        clicked = true;
-        break;
+        // Use mobile-appropriate click instead of center-clicking
+        const clickSuccess = await mobileClick(page, result.buttonSelector, {
+          waitForVisible: true,
+          timeout: 10000,
+          scrollIntoView: true,
+          useTouch: true,
+          addDelay: true
+        });
+        
+        if (clickSuccess) {
+          console.log(`[UnfollowUsers] ✅ ${result.message}`);
+          clicked = true;
+          break;
+        } else {
+          console.warn(`[UnfollowUsers] ⚠️ Mobile click failed on attempt ${attempt + 1}`);
+          await delay(2000);
+        }
       } else {
         console.warn(`[UnfollowUsers] ⚠️ Attempt ${attempt + 1} failed: ${result.message}`);
         await delay(2000);
@@ -74,17 +86,28 @@ async function unfollowUsers(page, profileId, username, limit) {
 
     if (clicked) {
       await delay(2000);
-      await page.evaluate(() => {
-        const confirmBtn = Array.from(document.querySelectorAll('button'))
-          .find(btn =>
-            btn.innerText.trim().toLowerCase() === 'unfollow' ||
-            btn.innerText.trim().toLowerCase() === 'zrušiť sledovanie'
-          );
-        if (confirmBtn) confirmBtn.click();
+      
+      // Use mobile-appropriate click for confirmation button
+      const confirmClickSuccess = await mobileClickEval(page, 'button', (btn) => {
+        const text = btn.innerText.trim().toLowerCase();
+        if (text === 'unfollow' || text === 'zrušiť sledovanie') {
+          btn.click();
+          return true;
+        }
+        return false;
+      }, {
+        waitForVisible: true,
+        timeout: 5000,
+        scrollIntoView: true,
+        addDelay: true
       });
-
-      console.log(`[UnfollowUsers] ✅ Confirmed unfollow for ${target}`);
-      unfollowed = true;
+      
+      if (confirmClickSuccess) {
+        console.log(`[UnfollowUsers] ✅ Confirmed unfollow for ${target}`);
+        unfollowed = true;
+      } else {
+        console.warn(`[UnfollowUsers] ⚠️ Failed to confirm unfollow for ${target}`);
+      }
     } else {
       console.warn(`[UnfollowUsers] ⚠️ Not found in list. Trying fallback via search…`);
       const result = await unfollowViaSearchIfNotFound(page, target, username);
