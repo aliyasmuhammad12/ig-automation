@@ -21,9 +21,9 @@ async function clickSearchIcon(page) {
     });
     
     if (clickSuccess) {
-      await delay(3000);
-      console.log('[clickSearchIcon] ✅ Clicked anchor');
-      return true;
+    await delay(3000);
+    console.log('[clickSearchIcon] ✅ Clicked anchor');
+    return true;
     } else {
       throw new Error('Mobile click failed');
     }
@@ -50,9 +50,9 @@ async function clickSearchIcon(page) {
     });
     
     if (clickSuccess) {
-      await delay(3000);
-      console.log('[clickSearchIcon] ✅ Clicked fallback SVG');
-      return true;
+    await delay(3000);
+    console.log('[clickSearchIcon] ✅ Clicked fallback SVG');
+    return true;
     } else {
       throw new Error('Mobile click failed');
     }
@@ -109,8 +109,8 @@ async function clearSearchBar(page, inputSel) {
     });
     
     if (clickSuccess) {
-      await delay(1000);
-      console.log('[clearSearchBar] ✅ Clicked clear button.');
+    await delay(1000);
+    console.log('[clearSearchBar] ✅ Clicked clear button.');
     } else {
       console.warn('[clearSearchBar] ⚠️ Mobile click failed');
     }

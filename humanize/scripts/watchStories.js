@@ -30,11 +30,362 @@ const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 const clamp01 = (n) => clamp(n, 0, 1);
 
 // ============================================================================
+// CONTENT DETECTION FUNCTIONS
+// ============================================================================
+
+/**
+ * Analyzes story content and extracts bounding boxes of problematic elements
+ * @param {ElementHandle} element - The story element to analyze
+ * @returns {Promise<Object>} - Content analysis with bounding boxes
+ */
+async function analyzeStoryContent(element) {
+  try {
+    const contentAnalysis = await element.evaluate(el => {
+      const html = el.outerHTML.toLowerCase();
+      const textContent = el.textContent?.toLowerCase() || '';
+      const ariaLabel = el.getAttribute('aria-label')?.toLowerCase() || '';
+      
+      // Find problematic elements and get their bounding boxes
+      const problematicElements = [];
+      
+      // Check for video elements (reels)
+      const videoElements = el.querySelectorAll('video');
+      videoElements.forEach(video => {
+        const rect = video.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          problematicElements.push({
+            type: 'reel',
+            x1: rect.left,
+            y1: rect.top,
+            x2: rect.right,
+            y2: rect.bottom,
+            confidence: 0.9
+          });
+        }
+      });
+      
+      // Check for play button indicators
+      const playButtons = el.querySelectorAll('svg[aria-label*="play"], svg[aria-label*="Play"], button[aria-label*="play"], button[aria-label*="Play"]');
+      playButtons.forEach(button => {
+        const rect = button.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          problematicElements.push({
+            type: 'play_button',
+            x1: rect.left,
+            y1: rect.top,
+            x2: rect.right,
+            y2: rect.bottom,
+            confidence: 0.8
+          });
+        }
+      });
+      
+      // Check for clickable links that might be mentions
+      const clickableLinks = el.querySelectorAll('a[href*="/"]');
+      clickableLinks.forEach(link => {
+        const rect = link.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          problematicElements.push({
+            type: 'mention_link',
+            x1: rect.left,
+            y1: rect.top,
+            x2: rect.right,
+            y2: rect.bottom,
+            confidence: 0.7
+          });
+        }
+      });
+      
+      // Check for @ symbols in text content (potential mentions)
+      const textNodes = el.querySelectorAll('*');
+      textNodes.forEach(node => {
+        if (node.textContent && node.textContent.includes('@')) {
+          const rect = node.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            problematicElements.push({
+              type: 'mention_text',
+              x1: rect.left,
+              y1: rect.top,
+              x2: rect.right,
+              y2: rect.bottom,
+              confidence: 0.6
+            });
+          }
+        }
+      });
+      
+      // Check for interactive buttons that might cause navigation issues
+      const interactiveButtons = el.querySelectorAll('button, [role="button"]');
+      interactiveButtons.forEach(button => {
+        // Skip if it's a story navigation button (close, next, etc.)
+        const ariaLabel = button.getAttribute('aria-label')?.toLowerCase() || '';
+        const isNavigationButton = ariaLabel.includes('close') || 
+                                 ariaLabel.includes('next') || 
+                                 ariaLabel.includes('previous') ||
+                                 ariaLabel.includes('back');
+        
+        if (!isNavigationButton) {
+          const rect = button.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            problematicElements.push({
+              type: 'interactive_button',
+              x1: rect.left,
+              y1: rect.top,
+              x2: rect.right,
+              y2: rect.bottom,
+              confidence: 0.5
+            });
+          }
+        }
+      });
+      
+      // Get viewport dimensions
+      const viewport = {
+        width: window.innerWidth,
+        height: window.innerHeight
+      };
+      
+      return {
+        hasProblematicContent: problematicElements.length > 0,
+        problematicElements,
+        viewport,
+        totalElements: problematicElements.length,
+        debug: {
+          html: html.substring(0, 200),
+          textContent: textContent.substring(0, 100),
+          ariaLabel: ariaLabel.substring(0, 100),
+          videoElements: videoElements.length,
+          playButtons: playButtons.length,
+          clickableLinks: clickableLinks.length,
+          interactiveButtons: interactiveButtons.length
+        }
+      };
+    });
+    
+    return contentAnalysis;
+  } catch (error) {
+    return {
+      hasProblematicContent: false,
+      problematicElements: [],
+      viewport: { width: 375, height: 812 },
+      totalElements: 0,
+      debug: { error: error.message }
+    };
+  }
+}
+
+/**
+ * Calculates safe tap zones by excluding problematic elements
+ * @param {Array} problematicElements - Array of bounding boxes to avoid
+ * @param {Object} viewport - Viewport dimensions
+ * @returns {Object} - Safe tap zones
+ */
+function getSafeTapZones(problematicElements, viewport) {
+  const { width, height } = viewport;
+  
+  // Debug: Log problematic elements
+  console.log(`[Debug] getSafeTapZones: ${problematicElements.length} elements, viewport: ${width}x${height}`);
+  if (problematicElements.length > 0) {
+    const firstElement = problematicElements[0];
+    console.log(`[Debug] First element: ${firstElement.type} at (${firstElement.x1},${firstElement.y1},${firstElement.x2},${firstElement.y2})`);
+  }
+  
+  // Define default safe zones (right side for story navigation)
+  const defaultZones = [
+    {
+      name: 'right_center',
+      x1: width * 0.75,
+      y1: height * 0.3,
+      x2: width * 0.95,
+      y2: height * 0.7,
+      priority: 1
+    },
+    {
+      name: 'right_upper',
+      x1: width * 0.75,
+      y1: height * 0.1,
+      x2: width * 0.95,
+      y2: height * 0.4,
+      priority: 2
+    },
+    {
+      name: 'right_lower',
+      x1: width * 0.75,
+      y1: height * 0.6,
+      x2: width * 0.95,
+      y2: height * 0.9,
+      priority: 3
+    },
+    {
+      name: 'center_right',
+      x1: width * 0.6,
+      y1: height * 0.4,
+      x2: width * 0.8,
+      y2: height * 0.6,
+      priority: 4
+    }
+  ];
+  
+  // Filter out zones that overlap with problematic elements
+  const safeZones = defaultZones.filter(zone => {
+    return !problematicElements.some(element => {
+      // Check if zone overlaps with problematic element
+      const overlaps = !(zone.x2 < element.x1 || zone.x1 > element.x2 || 
+                        zone.y2 < element.y1 || zone.y1 > element.y2);
+      return overlaps;
+    });
+  });
+  
+  // If no safe zones found, create a minimal safe zone
+  if (safeZones.length === 0) {
+    // Find the rightmost edge of all problematic elements
+    const validElements = problematicElements.filter(el => 
+      !isNaN(el.x1) && !isNaN(el.x2) && !isNaN(el.y1) && !isNaN(el.y2) &&
+      el.x1 >= 0 && el.x2 >= 0 && el.y1 >= 0 && el.y2 >= 0
+    );
+    
+    let rightmostEdge = 0;
+    if (validElements.length > 0) {
+      rightmostEdge = Math.max(...validElements.map(el => el.x2));
+    }
+    
+    // Create a safe zone to the right of all problematic elements
+    // If the screen is too crowded, use a small corner zone
+    const fallbackZone = {
+      name: 'fallback_right',
+      x1: Math.min(rightmostEdge + 10, width * 0.8),
+      y1: height * 0.3,
+      x2: width * 0.95,
+      y2: height * 0.7,
+      priority: 0
+    };
+    
+    // Validate the fallback zone
+    if (isNaN(fallbackZone.x1) || isNaN(fallbackZone.x2) || 
+        isNaN(fallbackZone.y1) || isNaN(fallbackZone.y2) ||
+        fallbackZone.x1 >= fallbackZone.x2 || fallbackZone.y1 >= fallbackZone.y2) {
+      // Ultimate fallback: use a small corner zone
+      fallbackZone.x1 = width * 0.85;
+      fallbackZone.y1 = height * 0.4;
+      fallbackZone.x2 = width * 0.95;
+      fallbackZone.y2 = height * 0.6;
+    }
+    
+    safeZones.push(fallbackZone);
+  }
+  
+  // Sort by priority (lower number = higher priority)
+  safeZones.sort((a, b) => a.priority - b.priority);
+  
+  return {
+    zones: safeZones,
+    totalZones: safeZones.length,
+    problematicElements: problematicElements.length,
+    viewport
+  };
+}
+
+/**
+ * Finds a safe zone for story navigation (avoiding interactive elements)
+ * @param {Page} page - Puppeteer page object
+ * @returns {Promise<Object>} - Safe zone coordinates
+ */
+async function findSafeNavigationZone(page) {
+  try {
+    const safeZone = await page.evaluate(() => {
+      const viewport = {
+        width: window.innerWidth,
+        height: window.innerHeight
+      };
+      
+      // Define safe zones (avoiding common interactive areas)
+      const safeZones = [
+        // Right side safe zone (most common for story navigation)
+        {
+          x: [viewport.width * 0.75, viewport.width * 0.95],
+          y: [viewport.height * 0.3, viewport.height * 0.7],
+          priority: 1
+        },
+        // Center-right safe zone
+        {
+          x: [viewport.width * 0.6, viewport.width * 0.8],
+          y: [viewport.height * 0.4, viewport.height * 0.6],
+          priority: 2
+        },
+        // Left side safe zone (fallback)
+        {
+          x: [viewport.width * 0.05, viewport.width * 0.25],
+          y: [viewport.height * 0.3, viewport.height * 0.7],
+          priority: 3
+        }
+      ];
+      
+      // Check for interactive elements in each zone
+      const interactiveElements = document.querySelectorAll('button, a, [role="button"], input, select, textarea');
+      const elementPositions = Array.from(interactiveElements).map(el => {
+        const rect = el.getBoundingClientRect();
+        return {
+          x: [rect.left, rect.right],
+          y: [rect.top, rect.bottom],
+          tagName: el.tagName,
+          role: el.getAttribute('role') || 'none'
+        };
+      });
+      
+      // Find the safest zone
+      let bestZone = safeZones[0];
+      let minInteractions = Infinity;
+      
+      for (const zone of safeZones) {
+        let interactions = 0;
+        
+        for (const element of elementPositions) {
+          // Check if element overlaps with zone
+          const overlaps = !(element.x[1] < zone.x[0] || element.x[0] > zone.x[1] || 
+                           element.y[1] < zone.y[0] || element.y[0] > zone.y[1]);
+          
+          if (overlaps) {
+            interactions++;
+          }
+        }
+        
+        if (interactions < minInteractions) {
+          minInteractions = interactions;
+          bestZone = zone;
+        }
+      }
+      
+      return {
+        zone: bestZone,
+        totalInteractiveElements: elementPositions.length,
+        interactionsInZone: minInteractions,
+        viewport
+      };
+    });
+    
+    return safeZone;
+  } catch (error) {
+    // Fallback to default safe zone
+    return {
+      zone: {
+        x: [0.75, 0.95],
+        y: [0.3, 0.7],
+        priority: 1
+      },
+      totalInteractiveElements: 0,
+      interactionsInZone: 0,
+      viewport: { width: 375, height: 812 }
+    };
+  }
+}
+
+// ============================================================================
 // FEATURE FLAG
 // ============================================================================
 
 const FEATURE_FLAGS = {
-  storySCv1: true // Enabled for testing the new system
+  storySCv1: true, // Enabled for testing the new system
+  useAdvancedRightTap: true // Advanced human-like tap system
 };
 
 // ============================================================================
@@ -148,7 +499,94 @@ const SC_CONFIG = {
   // Navigation (Smart Navigation System)
   urlChangeTimeout: 1800,
   urlPollInterval: [80, 150],
-  betweenAccountsDelay: [600, 2200]
+  betweenAccountsDelay: [600, 2200],
+  
+  // Advanced Right-Side Tap Randomization System
+  rightTap: {
+    // ROI (Region of Interest) - proportional to viewport
+    roi: {
+      x: [0.82, 0.96],  // x ∈ [0.82, 0.96] * width
+      y: [0.30, 0.78]   // y ∈ [0.30, 0.78] * height
+    },
+    // Exclusion bands (never tap here)
+    safety: {
+      top: 0.12,         // y < 0.12 * height
+      bottom: 0.88,      // y > 0.88 * height
+      right: 0.985       // x > 0.985 * width
+    },
+    // Session-varying weights (not fixed numbers)
+    weights: {
+      base: { mean: 0.70, std: 0.04, min: 0.60, max: 0.80 },  // wb ~ N(0.70, 0.04) → [0.60, 0.80]
+      rare: { alpha: 2, beta: 30, min: 0.02, max: 0.10 },      // wr ~ Beta(2, 30) → [0.02, 0.10]
+      // wide = 1 - wb - wr (typically lands near ~0.20)
+    },
+    // Hazard thresholds (boost probabilities if categories not used)
+    hazards: {
+      wideThreshold: 12,  // +5% to Wide after 12 taps without
+      rareThreshold: 40,  // +2% to Rare after 40 taps without
+      wideBoost: 0.05,
+      rareBoost: 0.02
+    },
+    // Session anchor initialization
+    anchor: {
+      x: { mean: 0.885, std: 0.010, min: 0.84, max: 0.95 },   // x ~ N(0.885, 0.010) → [0.84, 0.95]
+      y: { mean: 0.50, std: 0.040, min: 0.36, max: 0.64 }     // y ~ N(0.50, 0.040) → [0.36, 0.64]
+    },
+    // Micro-peaks configuration
+    microPeaks: {
+      count: 3,                    // K = 3 micro-peaks
+      deltaX: { min: -20, max: 16 },  // Δx_i ~ U([-20 px, +16 px]) - slightly biased inward
+      deltaY: {                    // Δy_i ~ mixture: 60% upper, 40% lower
+        upper: { prob: 0.60, range: [-60, -30] },
+        lower: { prob: 0.40, range: [30, 60] }
+      },
+      weights: [5, 2, 2]          // Dirichlet([5, 2, 2]) → peak 0 ≈ dominant, others smaller
+    },
+    // Micro-offsets distribution
+    offsets: {
+      dominantProb: { min: 0.45, max: 0.65 },  // p0 ~ U([0.45, 0.65])
+      pixelOffsets: [1, 2, 3, 4],              // {±1, ±2, ±3, ±4} px
+      weights: [0.22, 0.14, 0.11, 0.08]       // Decaying weights before renormalization
+    },
+    // Stickiness (probability to reuse same micro-peak)
+    stickiness: { min: 0.70, max: 0.85 },      // s ~ U([0.70, 0.85])
+    // Timing configuration
+    timing: {
+      baseDelay: { min: 160, max: 210 },       // Base delay range: [160, 210] ms
+      attemptMultiplier: 0.25,                 // 1 + 0.25*(attempt-1)
+      fatigueMultiplier: 0.30,                 // 1 + 0.30*f with f ∈ [0,1]
+      lookPause: {
+        chance: { min: 0.010, max: 0.025 },    // plook ~ U([0.010, 0.025])
+        duration: { min: 800, max: 1500 }      // [800, 1500] ms when triggered
+      }
+    },
+    // Anti-robot adjustments
+    antiRobot: {
+      minDistance: 14,              // Minimum distance from last tap (px)
+      minDistanceProb: 0.80,        // 80% probability to enforce min distance
+      resampleAttempts: 6           // Max attempts to resample if safety violated
+    },
+    // Wide zone configuration (elliptical Gaussian)
+    wideZone: {
+      sigmaX: 0.04,                 // σx ≈ 0.04 * width
+      sigmaY: 0.12                  // σy ≈ 0.12 * height
+    },
+    // Rare zone configuration
+    rareZones: {
+      edgeNear: {                   // Edge-near: x ~ N(0.975*width, 0.006*width), y ~ U([0.25, 0.75]*height)
+        x: { mean: 0.975, std: 0.006 },
+        y: { min: 0.25, max: 0.75 }
+      },
+      innerRight: {                 // Inner-right: x ~ N(0.78*width, 0.02*width), y ~ N(anchorY, 0.12*height)
+        x: { mean: 0.78, std: 0.02 },
+        y: { std: 0.12 }
+      },
+      highLow: {                    // High-right or Low-right: x ~ N(anchorX, 0.02*width), y ~ N(anchorY ± 0.22*height, 0.06*height)
+        x: { std: 0.02 },
+        y: { offset: 0.22, std: 0.06 }
+      }
+    }
+  }
 };
 
 // ============================================================================
@@ -178,6 +616,9 @@ class StorySession {
     
     // Per-account state (reset on new account)
     this.resetAccountState();
+    
+    // Initialize advanced right-side tap randomization system
+    this.initializeRightTapProfile();
     
     this.logSessionStart();
   }
@@ -254,6 +695,194 @@ class StorySession {
   
   logAccountExit(username, slides, scSpent, scAfter, fatigueAfter, barApplied, reason) {
     this.log(`[stories] user=${username} slides=${slides} sc_spent=${scSpent.toFixed(2)} sc_after=${scAfter.toFixed(2)} fatigue_after=${fatigueAfter.toFixed(3)} bar=${barApplied.toFixed(2)} reason=${reason}`);
+  }
+  
+  /**
+   * Initialize the advanced right-side tap randomization profile for this session
+   * Creates session-specific anchor points, micro-peaks, and statistical parameters
+   */
+  initializeRightTapProfile() {
+    const config = SC_CONFIG.rightTap;
+    
+    // Initialize session-specific anchor point (dominant center)
+    const anchorX = this.sampleNormal(
+      config.anchor.x.mean, 
+      config.anchor.x.std, 
+      config.anchor.x.min, 
+      config.anchor.x.max
+    );
+    const anchorY = this.sampleNormal(
+      config.anchor.y.mean, 
+      config.anchor.y.std, 
+      config.anchor.y.min, 
+      config.anchor.y.max
+    );
+    
+    // Create 3 micro-peaks relative to the anchor
+    const microPeaks = [];
+    for (let i = 0; i < config.microPeaks.count; i++) {
+      // Δx_i ~ U([-20 px, +16 px]) - slightly biased inward vs edge
+      const deltaX = rInt(config.microPeaks.deltaX.min, config.microPeaks.deltaX.max);
+      
+      // Δy_i ~ mixture: 60% upper [-60, -30], 40% lower [+30, +60]
+      let deltaY;
+      if (Math.random() < config.microPeaks.deltaY.upper.prob) {
+        deltaY = rInt(config.microPeaks.deltaY.upper.range[0], config.microPeaks.deltaY.upper.range[1]);
+  } else {
+        deltaY = rInt(config.microPeaks.deltaY.lower.range[0], config.microPeaks.deltaY.lower.range[1]);
+      }
+      
+      microPeaks.push({ deltaX, deltaY });
+    }
+    
+    // Draw peak weights via Dirichlet: w ~ Dirichlet([5, 2, 2])
+    const peakWeights = this.sampleDirichlet(config.microPeaks.weights);
+    
+    // Sample session-varying weights
+    const baseWeight = this.sampleNormal(
+      config.weights.base.mean, 
+      config.weights.base.std, 
+      config.weights.base.min, 
+      config.weights.base.max
+    );
+    const rareWeight = this.sampleBeta(
+      config.weights.rare.alpha, 
+      config.weights.rare.beta, 
+      config.weights.rare.min, 
+      config.weights.rare.max
+    );
+    const wideWeight = 1 - baseWeight - rareWeight; // Automatically calculated
+    
+    // Define discrete micro-offsets distribution per axis
+    const dominantProb = rFloat(config.offsets.dominantProb.min, config.offsets.dominantProb.max);
+    const remainingMass = 1 - dominantProb;
+    
+    // Split remaining mass over offsets {±1, ±2, ±3, ±4} px with decaying weights
+    const offsetWeights = config.offsets.weights.map(w => w * remainingMass);
+    const totalOffsetWeight = offsetWeights.reduce((sum, w) => sum + w, 0);
+    
+    // Renormalize so p0 + 2*(p1+p2+p3+p4) = 1
+    const normalizedOffsetWeights = offsetWeights.map(w => w / totalOffsetWeight);
+    
+    // Sample other session constants
+    const stickiness = rFloat(config.stickiness.min, config.stickiness.max);
+    const lookPauseChance = rFloat(config.timing.lookPause.chance.min, config.timing.lookPause.chance.max);
+    
+    // Store the complete tap profile
+    this.rightTapProfile = {
+      // Session anchor and micro-peaks
+      anchor: { x: anchorX, y: anchorY },
+      microPeaks: microPeaks,
+      peakWeights: peakWeights,
+      
+      // Session weights
+      weights: { base: baseWeight, wide: wideWeight, rare: rareWeight },
+      
+      // Micro-offset distribution
+      offsetDist: {
+        dominantProb: dominantProb,
+        pixelOffsets: config.offsets.pixelOffsets,
+        weights: normalizedOffsetWeights
+      },
+      
+      // Session constants
+      stickiness: stickiness,
+      lookPauseChance: lookPauseChance,
+      
+      // Timing constants
+      baseDelayRange: config.timing.baseDelay,
+      attemptMultiplier: config.timing.attemptMultiplier,
+      fatigueMultiplier: config.timing.fatigueMultiplier,
+      lookPauseDuration: config.timing.lookPause.duration,
+      
+      // Anti-robot settings
+      minDistance: config.antiRobot.minDistance,
+      minDistanceProb: config.antiRobot.minDistanceProb,
+      resampleAttempts: config.antiRobot.resampleAttempts,
+      
+      // Hazard tracking
+      tapsSinceWide: 0,
+      tapsSinceRare: 0,
+      
+      // State tracking
+      lastPeakIdx: null,
+      lastTap: null
+    };
+    
+    this.log(`[TapProfile] Initialized: anchor(${anchorX.toFixed(3)}, ${anchorY.toFixed(3)}), weights(B:${baseWeight.toFixed(2)}, W:${wideWeight.toFixed(2)}, R:${rareWeight.toFixed(2)})`);
+  }
+  
+  /**
+   * Sample from normal distribution with clamping
+   */
+  sampleNormal(mean, std, min, max) {
+    // Box-Muller transform for normal distribution
+    let u1, u2;
+    do {
+      u1 = Math.random();
+      u2 = Math.random();
+    } while (u1 === 0);
+    
+    const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+    const value = mean + z0 * std;
+    
+    return clamp(value, min, max);
+  }
+  
+  /**
+   * Sample from beta distribution with clamping
+   */
+  sampleBeta(alpha, beta, min, max) {
+    // Use rejection sampling for beta distribution
+    let x, y;
+    do {
+      x = Math.pow(Math.random(), 1.0 / alpha);
+      y = Math.pow(Math.random(), 1.0 / beta);
+    } while (x + y > 1.0);
+    
+    const value = x / (x + y);
+    return min + value * (max - min);
+  }
+  
+  /**
+   * Sample from Dirichlet distribution
+   */
+  sampleDirichlet(alpha) {
+    const gammaSamples = alpha.map(a => this.sampleGamma(a, 1.0));
+    const sum = gammaSamples.reduce((s, x) => s + x, 0);
+    return gammaSamples.map(x => x / sum);
+  }
+  
+  /**
+   * Sample from gamma distribution (helper for Dirichlet)
+   */
+  sampleGamma(alpha, beta) {
+    // Marsaglia and Tsang's method
+    if (alpha < 1) {
+      return this.sampleGamma(1 + alpha, beta) * Math.pow(Math.random(), 1.0 / alpha);
+    }
+    
+    const d = alpha - 1.0 / 3.0;
+    const c = 1.0 / Math.sqrt(9.0 * d);
+    
+    let x, v, u;
+    do {
+      x = this.sampleNormal(0, 1, -Infinity, Infinity);
+      v = 1.0 + c * x;
+    } while (v <= 0);
+    
+    v = v * v * v;
+    u = Math.random();
+    
+    if (u < 1.0 - 0.0331 * x * x * x * x) {
+      return beta * d * v;
+    }
+    
+    if (Math.log(u) < 0.5 * x * x + d * (1.0 - v + Math.log(v))) {
+      return beta * d * v;
+    }
+    
+    return this.sampleGamma(alpha, beta);
   }
 }
 
@@ -357,6 +986,7 @@ function startRareSlowdown(session) {
   
   session.rareSlowdown.active = true;
   session.rareSlowdown.tapsLeft = duration;
+  
   session.rareSlowdown.forcedLongDwell = true; // Force Long dwell on first tap
   
   session.log(`[RareSlowdown] Started: ${duration} taps, will force Long dwell on first tap`);
@@ -552,33 +1182,48 @@ async function smartNavigateToNextSlide(page, session) {
 
 async function attemptHumanLikeNavigation(page, session, attemptNumber) {
   try {
-    // Human-like tap variations based on attempt number
-    const tapVariations = [
-      { x: 0.75, y: 0.5, offset: 15, delay: 90 },      // Standard right-side tap
-      { x: 0.80, y: 0.45, offset: 20, delay: 120 },    // Slightly different position
-      { x: 0.70, y: 0.55, offset: 25, delay: 150 },    // More variation
-      { x: 0.85, y: 0.40, offset: 30, delay: 180 }     // Final attempt with longer delay
-    ];
-    
-    const variation = tapVariations[Math.min(attemptNumber - 1, tapVariations.length - 1)];
-    
     // Get viewport dimensions
     const vpDims = await page.evaluate(() => ({ w: innerWidth || 360, h: innerHeight || 640 }));
     
-    // Calculate tap position with human-like imprecision
-    const baseX = vpDims.w * variation.x;
-    const baseY = vpDims.h * variation.y;
+    // Analyze current story content to find problematic elements
+    const storyElement = await page.$('div[role="main"]') || await page.$('main') || await page.$('body');
+    let safeZones = null;
     
-    // Add natural variation (human imprecision)
-    const finalX = Math.max(1, Math.min(vpDims.w - 2, 
-      baseX + rInt(-variation.offset, variation.offset)));
-    const finalY = Math.max(1, Math.min(vpDims.h - 2, 
-      baseY + rInt(-variation.offset, variation.offset)));
+    if (storyElement) {
+      const contentAnalysis = await analyzeStoryContent(storyElement);
+      if (contentAnalysis.hasProblematicContent) {
+        // Convert viewport format from {w, h} to {width, height}
+        const viewport = { width: vpDims.w, height: vpDims.h };
+        safeZones = getSafeTapZones(contentAnalysis.problematicElements, viewport);
+        session.log(`[SmartNav] Content analysis: ${contentAnalysis.totalElements} problematic elements detected`);
+        session.log(`[SmartNav] Safe zones: ${safeZones.totalZones} zones available`);
+        
+        // Log safe zone details for debugging
+        if (safeZones.zones && safeZones.zones.length > 0) {
+          const bestZone = safeZones.zones[0];
+          session.log(`[SmartNav] Best safe zone: ${bestZone.name} at (${Math.round(bestZone.x1)},${Math.round(bestZone.y1)},${Math.round(bestZone.x2)},${Math.round(bestZone.y2)})`);
+        }
+        
+        // Log problematic elements for debugging (limit to first 5 to avoid spam)
+        const elementsToLog = contentAnalysis.problematicElements.slice(0, 5);
+        elementsToLog.forEach((element, index) => {
+          session.log(`[SmartNav] Avoiding ${element.type} at (${Math.round(element.x1)},${Math.round(element.y1)},${Math.round(element.x2)},${Math.round(element.y2)})`);
+        });
+        if (contentAnalysis.problematicElements.length > 5) {
+          session.log(`[SmartNav] ... and ${contentAnalysis.problematicElements.length - 5} more elements`);
+        }
+      } else {
+        session.log(`[SmartNav] No problematic content detected, using default zones`);
+      }
+    }
     
-    session.log(`[SmartNav] Tap attempt ${attemptNumber}: (${finalX}, ${finalY}) with ${variation.delay}ms delay`);
+    // Create truly randomized tap positions for each attempt using safe zones
+    const tapPosition = generateRandomizedTapPosition(vpDims, attemptNumber, session, safeZones);
+    
+    session.log(`[SmartNav] Tap attempt ${attemptNumber}: (${tapPosition.x}, ${tapPosition.y}) with ${tapPosition.delay}ms delay`);
     
     // Execute the tap with human-like timing
-    const tapSuccess = await executeHumanLikeTap(page, finalX, finalY, variation.delay);
+    const tapSuccess = await executeHumanLikeTap(page, tapPosition.x, tapPosition.y, tapPosition.delay);
     
     if (!tapSuccess) {
       return { success: false, reason: 'tap_failed' };
@@ -603,13 +1248,409 @@ async function attemptHumanLikeNavigation(page, session, attemptNumber) {
   }
 }
 
+/**
+ * Advanced Human-Like Tap System - Category-based sampling with session persistence
+ * Implements Base (≈70%), Wide (≈20%), Rare (≈10%) distribution with hazard tracking
+ */
+function generateRandomizedTapPosition(viewport, attemptNumber, session, safeZones = null) {
+  // Check feature flag for advanced tap system
+  if (!FEATURE_FLAGS.useAdvancedRightTap) {
+    // Fallback to simple randomized positioning
+    return generateSimpleRandomizedTapPosition(viewport, attemptNumber, session, safeZones);
+  }
+  
+  const config = SC_CONFIG.rightTap;
+  const profile = session.rightTapProfile;
+  
+  // Use safe zones if provided, otherwise use default ROI
+  let roi = config.roi;
+  if (safeZones && safeZones.zones && safeZones.zones.length > 0) {
+    // Use the highest priority safe zone
+    const bestZone = safeZones.zones[0];
+    roi = {
+      x: [Math.max(0, bestZone.x1 / viewport.w), Math.min(1, bestZone.x2 / viewport.w)],
+      y: [Math.max(0, bestZone.y1 / viewport.h), Math.min(1, bestZone.y2 / viewport.h)]
+    };
+    
+    // Debug logging
+    console.log(`[Debug] Safe zone: (${bestZone.x1},${bestZone.y1},${bestZone.x2},${bestZone.y2})`);
+    console.log(`[Debug] Viewport: ${viewport.w}x${viewport.h}`);
+    console.log(`[Debug] ROI: x[${roi.x[0].toFixed(3)},${roi.x[1].toFixed(3)}], y[${roi.y[0].toFixed(3)},${roi.y[1].toFixed(3)}]`);
+    
+    // Ensure valid ROI bounds
+    if (isNaN(roi.x[0]) || isNaN(roi.x[1]) || isNaN(roi.y[0]) || isNaN(roi.y[1]) ||
+        roi.x[0] >= roi.x[1] || roi.y[0] >= roi.y[1]) {
+      console.log(`[Debug] Invalid ROI bounds (NaN or invalid), falling back to default`);
+      // Fallback to default ROI if safe zone is invalid
+      roi = config.roi;
+    }
+  }
+  
+  // Step A: Choose category (Base/Wide/Rare) with hazard adjustments
+  let adjustedWeights = { ...profile.weights };
+  
+  // Apply hazard boosts if thresholds not met
+  if (profile.tapsSinceWide >= config.hazards.wideThreshold) {
+    adjustedWeights.wide += config.hazards.wideBoost;
+    adjustedWeights.base -= config.hazards.wideBoost * 0.7;  // Reduce base proportionally
+    adjustedWeights.rare -= config.hazards.wideBoost * 0.3;  // Reduce rare proportionally
+  }
+  if (profile.tapsSinceRare >= config.hazards.rareThreshold) {
+    adjustedWeights.rare += config.hazards.rareBoost;
+    adjustedWeights.base -= config.hazards.rareBoost * 0.8;  // Reduce base proportionally
+    adjustedWeights.wide -= config.hazards.rareBoost * 0.2;  // Reduce wide proportionally
+  }
+  
+  // Renormalize weights
+  const totalWeight = adjustedWeights.base + adjustedWeights.wide + adjustedWeights.rare;
+  adjustedWeights.base /= totalWeight;
+  adjustedWeights.wide /= totalWeight;
+  adjustedWeights.rare /= totalWeight;
+  
+  // Sample category
+  const roll = Math.random();
+  let category, cumulative = 0;
+  for (const [cat, weight] of Object.entries(adjustedWeights)) {
+    cumulative += weight;
+    if (roll <= cumulative) {
+      category = cat;
+      break;
+    }
+  }
+  
+  // Step B: Sample coordinates by category
+  let x, y;
+  let attempts = 0;
+  const maxAttempts = config.antiRobot.resampleAttempts;
+  
+  do {
+    attempts++;
+    
+    if (category === 'base') {
+      // BASE: dominant cluster around session anchor
+      let peakIdx;
+      
+      // Stickiness: reuse same peak with probability s
+      if (profile.lastPeakIdx !== null && Math.random() < profile.stickiness) {
+        peakIdx = profile.lastPeakIdx;
+  } else {
+        // Sample by peak weights
+  const roll = Math.random();
+        let cumulative = 0;
+        for (let i = 0; i < profile.peakWeights.length; i++) {
+          cumulative += profile.peakWeights[i];
+          if (roll <= cumulative) {
+            peakIdx = i;
+            break;
+          }
+        }
+      }
+      
+      // Get coordinates from chosen peak
+      const peak = profile.microPeaks[peakIdx];
+      const peakX = profile.anchor.x * viewport.w + peak.deltaX;
+      const peakY = profile.anchor.y * viewport.h + peak.deltaY;
+      
+      // Sample discrete offsets per axis
+      const offsetX = sampleDiscreteOffset(profile.offsetDist);
+      const offsetY = sampleDiscreteOffset(profile.offsetDist);
+      
+      // Add small continuous jitter
+      const jitterX = rFloat(-2, 2);
+      const jitterY = rFloat(-2, 2);
+      
+      x = peakX + offsetX + jitterX;
+      y = peakY + offsetY + jitterY;
+      
+      // Store peak index for stickiness
+      profile.lastPeakIdx = peakIdx;
+      
+    } else if (category === 'wide') {
+      // WIDE: broader right-side zone (elliptical Gaussian)
+      const sigmaX = config.wideZone.sigmaX * viewport.w;
+      const sigmaY = config.wideZone.sigmaY * viewport.h;
+      
+      // Sample from truncated elliptical Gaussian
+      do {
+        const u1 = Math.random();
+        const u2 = Math.random();
+        
+        // Box-Muller transform
+        const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+        const z1 = Math.sqrt(-2.0 * Math.log(u1)) * Math.sin(2.0 * Math.PI * u2);
+        
+        x = profile.anchor.x * viewport.w + z0 * sigmaX;
+        y = profile.anchor.y * viewport.h + z1 * sigmaY;
+      } while (!isInSafeZone(x, y, viewport, config, roi));
+      
+    } else { // category === 'rare'
+      // RARE: farther, unexpected but plausible
+      const rareZone = chooseRareZone(config.rareZones, profile.anchor, viewport);
+      
+      if (rareZone === 'edgeNear') {
+        x = sampleNormal(config.rareZones.edgeNear.x.mean * viewport.w, 
+                        config.rareZones.edgeNear.x.std * viewport.w, 
+                        roi.x[0] * viewport.w, 
+                        roi.x[1] * viewport.w);
+        y = rFloat(config.rareZones.edgeNear.y.min * viewport.h, 
+                   config.rareZones.edgeNear.y.max * viewport.h);
+      } else if (rareZone === 'innerRight') {
+        x = sampleNormal(config.rareZones.innerRight.x.mean * viewport.w, 
+                        config.rareZones.innerRight.x.std * viewport.w, 
+                        roi.x[0] * viewport.w, 
+                        roi.x[1] * viewport.w);
+        y = sampleNormal(profile.anchor.y * viewport.h, 
+                        config.rareZones.innerRight.y.std * viewport.h, 
+                        roi.y[0] * viewport.h, 
+                        roi.y[1] * viewport.h);
+      } else { // highLow
+        const sign = Math.random() < 0.5 ? 1 : -1;
+        x = sampleNormal(profile.anchor.x * viewport.w, 
+                        config.rareZones.highLow.x.std * viewport.w, 
+                        roi.x[0] * viewport.w, 
+                        roi.x[1] * viewport.w);
+        y = sampleNormal(profile.anchor.y * viewport.h + sign * config.rareZones.highLow.y.offset * viewport.h, 
+                        config.rareZones.highLow.y.std * viewport.h, 
+                        roi.y[0] * viewport.h, 
+                        roi.y[1] * viewport.h);
+      }
+    }
+    
+    // Clamp to ROI and safety zones
+    x = clamp(x, roi.x[0] * viewport.w, roi.x[1] * viewport.w);
+    y = clamp(y, roi.y[0] * viewport.h, roi.y[1] * viewport.h);
+    
+    // Safety check: never violate exclusion bands
+    if (y < config.safety.top * viewport.h || 
+        y > config.safety.bottom * viewport.h || 
+        x > config.safety.right * viewport.w) {
+      // Snap to safe anchor inside ROI
+      x = profile.anchor.x * viewport.w;
+      y = profile.anchor.y * viewport.h;
+      break;
+    }
+    
+  } while (attempts < maxAttempts && !isInSafeZone(x, y, viewport, config, roi));
+  
+  // Step C: Anti-robot adjustments
+  if (profile.lastTap && Math.random() < profile.minDistanceProb) {
+    const lastTap = profile.lastTap;
+    const distance = Math.sqrt((x - lastTap.x) ** 2 + (y - lastTap.y) ** 2);
+    
+    if (distance < profile.minDistance) {
+      // Push away along vector by (minDist - d + 1) px
+      const vectorX = x - lastTap.x;
+      const vectorY = y - lastTap.y;
+      const vectorLength = Math.sqrt(vectorX ** 2 + vectorY ** 2);
+      
+      if (vectorLength > 0) {
+        const pushDistance = profile.minDistance - distance + 1;
+        x += (vectorX / vectorLength) * pushDistance;
+        y += (vectorY / vectorLength) * pushDistance;
+        
+        // Re-clamp to safety
+        x = clamp(x, roi.x[0] * viewport.w, roi.x[1] * viewport.w);
+        y = clamp(y, roi.y[0] * viewport.h, roi.y[1] * viewport.h);
+      }
+    }
+  }
+  
+  // Step D: Calculate delay
+  let delay;
+  if (Math.random() < profile.lookPauseChance) {
+    // Look pause: longer delay
+    delay = rFloat(config.timing.lookPause.duration.min, config.timing.lookPause.duration.max);
+  } else {
+    // Normal delay with multipliers
+    const baseDelay = rFloat(profile.baseDelayRange.min, profile.baseDelayRange.max);
+    const attemptMultiplier = 1 + profile.attemptMultiplier * (attemptNumber - 1);
+    const fatigueMultiplier = 1 + profile.fatigueMultiplier * session.fatigue;
+    delay = baseDelay * attemptMultiplier * fatigueMultiplier;
+  }
+  
+  // Update session state
+  profile.lastTap = { x: Math.round(x), y: Math.round(y) };
+  
+  // Update hazard counters
+  if (category === 'wide') {
+    profile.tapsSinceWide = 0;
+  } else {
+    profile.tapsSinceWide++;
+  }
+  
+  if (category === 'rare') {
+    profile.tapsSinceRare = 0;
+  } else {
+    profile.tapsSinceRare++;
+  }
+  
+  // Store for legacy compatibility
+  session.lastTapX = Math.round(x);
+  session.lastTapY = Math.round(y);
+  
+  return {
+    x: Math.round(x),
+    y: Math.round(y),
+    delay: Math.round(delay),
+    zone: 'right_navigation',
+    category: category,
+    attempts: attempts
+  };
+}
+
+/**
+ * Global statistical sampling functions
+ */
+function sampleNormal(mean, std, min, max) {
+  // Box-Muller transform for normal distribution
+  let u1, u2;
+  do {
+    u1 = Math.random();
+    u2 = Math.random();
+  } while (u1 === 0);
+  
+  const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+  const value = mean + z0 * std;
+  
+  return clamp(value, min, max);
+}
+
+/**
+ * Helper function to sample discrete pixel offsets
+ */
+function sampleDiscreteOffset(offsetDist) {
+  const roll = Math.random();
+  if (roll < offsetDist.dominantProb) {
+    return 0; // Dominant (no offset)
+  }
+  
+  // Sample from {±1, ±2, ±3, ±4} px
+  const remainingRoll = (roll - offsetDist.dominantProb) / (1 - offsetDist.dominantProb);
+  let cumulative = 0;
+  
+  for (let i = 0; i < offsetDist.pixelOffsets.length; i++) {
+    cumulative += offsetDist.weights[i];
+    if (remainingRoll <= cumulative) {
+      const sign = Math.random() < 0.5 ? 1 : -1;
+      return sign * offsetDist.pixelOffsets[i];
+    }
+  }
+  
+  return 0; // Fallback
+}
+
+/**
+ * Helper function to choose a rare zone
+ */
+function chooseRareZone(rareZones, anchor, viewport) {
+  const zones = ['edgeNear', 'innerRight', 'highLow'];
+  const weights = [0.4, 0.35, 0.25]; // Slightly favor edge-near
+  
+  const roll = Math.random();
+  let cumulative = 0;
+  for (let i = 0; i < zones.length; i++) {
+    cumulative += weights[i];
+    if (roll <= cumulative) {
+      return zones[i];
+    }
+  }
+  return 'edgeNear'; // Fallback
+}
+
+/**
+ * Helper function to check if coordinates are in safe zone
+ */
+function isInSafeZone(x, y, viewport, config, roi = null) {
+  const effectiveRoi = roi || config.roi;
+  return x >= effectiveRoi.x[0] * viewport.w &&
+         x <= effectiveRoi.x[1] * viewport.w &&
+         y >= effectiveRoi.y[0] * viewport.h &&
+         y <= effectiveRoi.y[1] * viewport.h &&
+         y >= config.safety.top * viewport.h &&
+         y <= config.safety.bottom * viewport.h &&
+         x <= config.safety.right * viewport.w;
+}
+
+/**
+ * Fallback simple randomized tap positioning (when advanced system is disabled)
+ */
+function generateSimpleRandomizedTapPosition(viewport, attemptNumber, session, safeZones = null) {
+  // Use safe zones if provided, otherwise fallback to simple right-side zone
+  let rightZone;
+  if (safeZones && safeZones.zones && safeZones.zones.length > 0) {
+    // Use the highest priority safe zone
+    const bestZone = safeZones.zones[0];
+    rightZone = {
+      xMin: Math.max(0, bestZone.x1 / viewport.w),
+      xMax: Math.min(1, bestZone.x2 / viewport.w),
+      yMin: Math.max(0, bestZone.y1 / viewport.h),
+      yMax: Math.min(1, bestZone.y2 / viewport.h)
+    };
+    
+    // Ensure valid zone bounds
+    if (isNaN(rightZone.xMin) || isNaN(rightZone.xMax) || isNaN(rightZone.yMin) || isNaN(rightZone.yMax) ||
+        rightZone.xMin >= rightZone.xMax || rightZone.yMin >= rightZone.yMax) {
+      // Fallback to default zone if safe zone is invalid
+      rightZone = {
+        xMin: 0.70, xMax: 0.90,
+        yMin: 0.30, yMax: 0.70
+      };
+    }
+  } else {
+    // Simple right-side zone with natural variation
+    rightZone = {
+      xMin: 0.70, xMax: 0.90,
+      yMin: 0.30, yMax: 0.70
+    };
+  }
+  
+  // Generate base position with natural variation
+  let baseX = rFloat(rightZone.xMin, rightZone.xMax);
+  let baseY = rFloat(rightZone.yMin, rightZone.yMax);
+  
+  // Add micro-variation for human imprecision
+  const microOffset = rInt(5, 20);
+  const finalX = Math.max(1, Math.min(viewport.w - 2, 
+    Math.round(viewport.w * baseX + rInt(-microOffset, microOffset))));
+  const finalY = Math.max(1, Math.min(viewport.h - 2, 
+    Math.round(viewport.h * baseY + rInt(-microOffset, microOffset))));
+  
+  // Natural delay variation
+  const baseDelay = rInt(100, 200);
+  const attemptMultiplier = 1 + (attemptNumber - 1) * 0.3;
+  const finalDelay = Math.round(baseDelay * attemptMultiplier);
+  
+  // Store for drift calculation
+  session.lastTapX = finalX;
+  session.lastTapY = finalY;
+  
+  return {
+    x: finalX,
+    y: finalY,
+    delay: finalDelay,
+    zone: 'right_navigation_simple',
+    category: 'fallback'
+  };
+}
+
 async function executeHumanLikeTap(page, x, y, delayMs) {
   try {
-    const cdp = await page.target().createCDPSession();
+  const cdp = await page.target().createCDPSession();
     
-    // Human-like touch parameters
-    const force = rFloat(0.4, 0.7);
-    const radius = rInt(3, 6);
+    // Enhanced human-like touch parameters with natural variation
+    const force = rFloat(0.35, 0.75); // Wider force range for natural variation
+    const radius = rInt(2, 8); // More varied touch radius
+    
+    // Add natural touch pressure variation
+    const pressureVariation = rFloat(0.8, 1.2);
+    const adjustedForce = clamp(force * pressureVariation, 0.2, 0.9);
+    
+    // Natural touch timing variation
+    const touchStartDelay = rInt(10, 40); // Small delay before touch
+    const touchEndDelay = rInt(15, 35);   // Small delay after touch
+    
+    // Execute touch with natural timing
+    await sleep(touchStartDelay);
     
     await cdp.send('Input.dispatchTouchEvent', {
       type: 'touchStart',
@@ -617,15 +1658,19 @@ async function executeHumanLikeTap(page, x, y, delayMs) {
         x: Math.round(x), 
         y: Math.round(y), 
         id: 1, 
-        force, 
+        force: adjustedForce, 
         radiusX: radius, 
         radiusY: radius 
       }],
     });
     
-    await sleep(delayMs);
+    // Main delay with micro-variation
+    const mainDelay = delayMs + rInt(-20, 30); // ±20-30ms natural variation
+    await sleep(mainDelay);
     
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    
+    await sleep(touchEndDelay);
     await cdp.detach();
     
     return true;
@@ -669,12 +1714,27 @@ async function touchTapAt(page, x, y, opts = {}) {
     const cx = Math.max(1, Math.min(vpDims.w - 2, Math.round(x)));
     const cy = Math.max(1, Math.min(vpDims.h - 2, Math.round(y)));
     
+    // Add natural micro-variation to the exact coordinates for human-like imprecision
+    const microOffsetX = rInt(-3, 3);
+    const microOffsetY = rInt(-3, 3);
+    const finalX = Math.max(1, Math.min(vpDims.w - 2, cx + microOffsetX));
+    const finalY = Math.max(1, Math.min(vpDims.h - 2, cy + microOffsetY));
+    
     const cdp = await page.target().createCDPSession();
+    
+    // Enhanced human-like touch parameters
+    const adjustedForce = force * rFloat(0.9, 1.1); // ±10% force variation
+    const adjustedRadius = radius + rInt(-1, 1); // ±1px radius variation
+    
     await cdp.send('Input.dispatchTouchEvent', {
       type: 'touchStart',
-      touchPoints: [{ x: cx, y: cy, id: 1, force, radiusX: radius, radiusY: radius }],
+      touchPoints: [{ x: finalX, y: finalY, id: 1, force: adjustedForce, radiusX: adjustedRadius, radiusY: adjustedRadius }],
     });
-    await sleep(delayMs);
+    
+    // Natural delay variation
+    const adjustedDelay = delayMs + rInt(-15, 20); // ±15-20ms delay variation
+    await sleep(adjustedDelay);
+    
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     try { await cdp.detach(); } catch { }
     return true;
@@ -684,32 +1744,37 @@ async function touchTapAt(page, x, y, opts = {}) {
 async function storyTapNext(page, session) {
   const vpDims = await page.evaluate(() => ({ w: innerWidth || 360, h: innerHeight || 640 }));
   
-  const tapX = rInt(vpDims.w * 0.75, vpDims.w * 0.95);
-  const tapY = rInt(vpDims.h * 0.35, vpDims.h * 0.65);
+  // Use the same randomized positioning system for consistency
+  const tapPosition = generateRandomizedTapPosition(vpDims, 1, session);
   
-  const offsetX = rInt(-10, 10);
-  const offsetY = rInt(-15, 15);
-  const finalX = Math.max(1, Math.min(vpDims.w - 2, tapX + offsetX));
-  const finalY = Math.max(1, Math.min(vpDims.h - 2, tapY + offsetY));
-  
-  session.log(`[Continue] 👉 Tapped right side for next slide (${finalX}, ${finalY})`);
+  session.log(`[Continue] 👉 Tapped right side for next slide (${tapPosition.x}, ${tapPosition.y})`);
   
   try {
     const cdp = await page.target().createCDPSession();
     
-    await cdp.send('Input.dispatchTouchEvent', {
+    // Enhanced human-like touch parameters with natural variation
+    const force = rFloat(0.35, 0.75); // Wider force range
+    const radius = rInt(2, 8); // More varied touch radius
+    
+    // Add natural touch pressure variation
+    const pressureVariation = rFloat(0.8, 1.2);
+    const adjustedForce = clamp(force * pressureVariation, 0.2, 0.9);
+      
+      await cdp.send('Input.dispatchTouchEvent', {
       type: 'touchStart',
       touchPoints: [{ 
-        x: finalX, 
-        y: finalY, 
+        x: tapPosition.x, 
+        y: tapPosition.y, 
         id: 1, 
-        force: rFloat(0.4, 0.7), 
-        radiusX: rInt(3, 6), 
-        radiusY: rInt(3, 6) 
+        force: adjustedForce, 
+        radiusX: radius, 
+        radiusY: radius 
       }],
     });
     
-    await sleep(rInt(80, 150));
+    // Natural delay variation
+    const delay = rInt(80, 150) + rInt(-15, 25); // Base delay ± variation
+    await sleep(delay);
     
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await cdp.detach();
@@ -821,8 +1886,16 @@ async function navigateToStories(page, session, visitedProfiles = new Set()) {
                });
                
                if (!storyInfo.isYourStory && storyInfo.isUnviewed) {
-                 unviewedStories.push({ element, storyInfo, index: j });
-                 session.log(`[Stories] Found unviewed story at index ${j} (aria: "${storyInfo.ariaLabel}")`);
+                 // Analyze content to get bounding boxes of problematic elements
+                 const contentAnalysis = await analyzeStoryContent(element);
+                 
+                 unviewedStories.push({ element, storyInfo, index: j, contentAnalysis });
+                 
+                 if (contentAnalysis.hasProblematicContent) {
+                   session.log(`[Stories] Found unviewed story at index ${j} with ${contentAnalysis.totalElements} problematic elements (aria: "${storyInfo.ariaLabel}")`);
+                 } else {
+                   session.log(`[Stories] Found clean unviewed story at index ${j} (aria: "${storyInfo.ariaLabel}")`);
+                 }
                }
              }
              
@@ -900,8 +1973,15 @@ async function navigateToStories(page, session, visitedProfiles = new Set()) {
                      continue;
                    }
                    
+                   // Analyze content to get bounding boxes of problematic elements
+                   const contentAnalysis = await analyzeStoryContent(element);
+                   
                    storyButton = element;
-                   session.log(`[Stories] Using story at index ${j} (viewed: ${storyInfo.isViewed}, unviewed: ${storyInfo.isUnviewed}, aria: "${storyInfo.ariaLabel}")`);
+                   if (contentAnalysis.hasProblematicContent) {
+                     session.log(`[Stories] Using story at index ${j} with ${contentAnalysis.totalElements} problematic elements (viewed: ${storyInfo.isViewed}, unviewed: ${storyInfo.isUnviewed}, aria: "${storyInfo.ariaLabel}")`);
+                   } else {
+                     session.log(`[Stories] Using clean story at index ${j} (viewed: ${storyInfo.isViewed}, unviewed: ${storyInfo.isUnviewed}, aria: "${storyInfo.ariaLabel}")`);
+                   }
                    break;
                  }
                }
@@ -927,8 +2007,15 @@ async function navigateToStories(page, session, visitedProfiles = new Set()) {
                  const username = usernameMatch ? usernameMatch[1] : `profile_${j}`;
                  
                  if (!visitedProfiles.has(username)) {
+                   // Analyze content to get bounding boxes of problematic elements
+                   const contentAnalysis = await analyzeStoryContent(element);
+                   
                    storyButton = element;
-                   session.log(`[Stories] Using first available non-visited story: ${username}`);
+                   if (contentAnalysis.hasProblematicContent) {
+                     session.log(`[Stories] Using first available non-visited story: ${username} (${contentAnalysis.totalElements} problematic elements)`);
+                   } else {
+                     session.log(`[Stories] Using first available clean non-visited story: ${username}`);
+                   }
                    break;
                  }
                }
@@ -985,7 +2072,7 @@ async function navigateToStories(page, session, visitedProfiles = new Set()) {
                }
              }
              
-          await sleep(rInt(1000, 2000));
+        await sleep(rInt(1000, 2000));
              session.log(`[Stories] Clicked story element with selector: ${selector}`);
              
              await sleep(2000);
@@ -1010,7 +2097,7 @@ async function navigateToStories(page, session, visitedProfiles = new Set()) {
                  session.log(`[Stories] Added ${username} to visited profiles (total: ${visitedProfiles.size})`);
           }
           
-          return true;
+            return true;
              } else {
                session.log(`[Stories] Failed to enter story view, will try next story`);
                // Try the next story element
@@ -1039,8 +2126,8 @@ async function navigateToStories(page, session, visitedProfiles = new Set()) {
                }
              }
            }
-        }
-      } catch (error) {
+          }
+        } catch (error) {
         session.log(`[Stories] Selector failed: ${selector} - ${error.message}`);
       }
     }
@@ -1786,5 +2873,8 @@ async function watchStoriesLegacy(page, durationSeconds = 60, accountId = 'unkno
 
 module.exports = {
   watchStories,
-  FEATURE_FLAGS
+  FEATURE_FLAGS,
+  StorySession,
+  generateRandomizedTapPosition,
+  SC_CONFIG
 };

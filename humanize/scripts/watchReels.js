@@ -372,7 +372,7 @@ module.exports = {
       await sleep(rInt(cfg.betweenReelPauseMs[0], cfg.betweenReelPauseMs[1]));
       
       // Extra wait for slow internet connections
-      await sleep(rInt(2000, 4000)); // 2-4 seconds extra for slow connections
+      await sleep(rInt(2000, 4000)); // 2-4 seconds extra for slow connections 
       
       if ((now() - start) / 1000 >= runSeconds) break;
 
