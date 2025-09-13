@@ -523,7 +523,7 @@ const SC_CONFIG = {
     // Hazard thresholds (boost probabilities if categories not used)
     hazards: {
       wideThreshold: 12,  // +5% to Wide after 12 taps without
-      rareThreshold: 40,  // +2% to Rare after 40 taps without
+      rareThreshold: 40,  // +2% to Rare after 40 taps withoutia
       wideBoost: 0.05,
       rareBoost: 0.02
     },

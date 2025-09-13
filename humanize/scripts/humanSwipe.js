@@ -195,7 +195,7 @@ async function dispatchAdvancedSwipe(client, pathInfo, sessionState) {
   await client.send('Input.dispatchTouchEvent', {
     type: 'touchEnd',
     touchPoints: [],
-    modifiers: 0,
+    modifiers: 0, 
     timestamp: endTimestamp
   });
 }
@@ -254,7 +254,7 @@ async function swipeNext(page, options = {}) {
     vw, vh,
     startX, startY,
     sessionState: session,
-    profileName: options.profileName,
+    profileName: options.profileName,                      
     forceOutlier: options.forceOutlier
   });
 

@@ -1,0 +1,50 @@
+{
+  "concurrency": 1,
+  "accountsPerPod": 5,
+  "idle": {
+    "baseMinMs": 900000,
+    "baseMaxMs": 3600000
+  },
+  "handoff": {
+    "distribution": "lognormal",
+    "modeMs": 54000,
+    "minMs": 15000,
+    "maxMs": 900000
+  },
+  "bursts": {
+    "enabled": true,
+    "probability": 0.10,
+    "minMs": 15000,
+    "maxMs": 45000,
+    "energyGuard": true
+  },
+  "weights": {
+    "base": {
+      "follow": 0.35,
+      "unfollow": 0.20,
+      "reels": 0.80,
+      "stories": 0.10
+    }
+  },
+  "unfollowTrigger": {
+    "type": "threshold",
+    "threshold": 50
+  },
+  "storiesPolicy": {
+    "mode": "fluid",
+    "rarityBias": 0.3
+  },
+  "timeguards": {
+    "reelsMaxSeconds": null,
+    "storiesMaxSeconds": 180
+  },
+  "recovery": {
+    "maxRecoverySteps": 5,
+    "retryBackoffMs": 30000,
+    "maxErrorStreak": 3
+  },
+  "logging": {
+    "toDb": true,
+    "toFile": true
+  }
+}

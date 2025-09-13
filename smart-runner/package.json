@@ -1,0 +1,25 @@
+{
+  "name": "smart-runner",
+  "version": "1.0.0",
+  "description": "Smart Instagram automation runner with pod management",
+  "main": "smart-runner.js",
+  "bin": {
+    "smart-runner": "./smart-runner.js"
+  },
+  "scripts": {
+    "start": "node smart-runner.js",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "dependencies": {
+    "uuid": "^9.0.0"
+  },
+  "keywords": [
+    "instagram",
+    "automation",
+    "runner",
+    "pod",
+    "scheduler"
+  ],
+  "author": "Smart Runner",
+  "license": "MIT"
+}

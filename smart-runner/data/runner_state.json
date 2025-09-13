@@ -1,0 +1,97 @@
+[
+  {
+    "profileId": "k12im9s2",
+    "pod": "podA",
+    "nextEligibleAt": "2025-09-08T21:01:36.905Z",
+    "lastActiveAt": null,
+    "startsToday": 0,
+    "energy": 100,
+    "flags": {
+      "running": false,
+      "needsRecovery": false
+    },
+    "errorStreak": 0,
+    "mood": "Sleep",
+    "daypart": "Sleep"
+  },
+  {
+    "profileId": "k12im9ry",
+    "pod": "podA",
+    "nextEligibleAt": "2025-09-08T21:01:36.905Z",
+    "lastActiveAt": null,
+    "startsToday": 0,
+    "energy": 100,
+    "flags": {
+      "running": false,
+      "needsRecovery": false
+    },
+    "errorStreak": 0,
+    "mood": "Sleep",
+    "daypart": "Sleep"
+  },
+  {
+    "profileId": "k12im9s3",
+    "pod": "podA",
+    "nextEligibleAt": "2025-09-08T21:01:36.905Z",
+    "lastActiveAt": null,
+    "startsToday": 0,
+    "energy": 100,
+    "flags": {
+      "running": false,
+      "needsRecovery": false
+    },
+    "errorStreak": 0,
+    "mood": "Sleep",
+    "daypart": "Sleep"
+  },
+  {
+    "profileId": "k12im9s4",
+    "pod": "podA",
+    "nextEligibleAt": "2025-09-08T21:01:36.905Z",
+    "lastActiveAt": null,
+    "startsToday": 0,
+    "energy": 100,
+    "flags": {
+      "running": false,
+      "needsRecovery": false
+    },
+    "errorStreak": 0,
+    "mood": "Sleep",
+    "daypart": "Sleep"
+  },
+  {
+    "profileId": "k12im9s5",
+    "pod": "podA",
+    "nextEligibleAt": "2025-09-08T21:01:36.905Z",
+    "lastActiveAt": null,
+    "startsToday": 0,
+    "energy": 100,
+    "flags": {
+      "running": false,
+      "needsRecovery": false
+    },
+    "errorStreak": 0,
+    "mood": "Sleep",
+    "daypart": "Sleep"
+  },
+  {
+    "profileId": "testProfile123",
+    "pod": "testPod",
+    "errorStreak": 4,
+    "flags": {
+      "running": false,
+      "needsRecovery": true
+    }
+  },
+  {
+    "profileId": "testProfile456",
+    "pod": "testPod",
+    "errorStreak": 4,
+    "flags": {
+      "running": false,
+      "needsRecovery": false,
+      "paused": true
+    },
+    "pausedUntil": "2025-09-09T21:32:25.086Z"
+  }
+]

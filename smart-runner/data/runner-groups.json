@@ -1,0 +1,14 @@
+{
+  "pods": [
+    {
+      "pod": "podA",
+      "profiles": [
+        "k12im9s2",
+        "k12im9ry",
+        "k12im9s3",
+        "k12im9s4",
+        "k12im9s5"
+      ]
+    }
+  ]
+}
