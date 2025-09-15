@@ -1,0 +1,102 @@
+{
+  "moods": {
+    "DoNotDisturb": {
+      "followed": { "min": 3, "max": 6 },
+      "suggested": { "min": 0, "max": 2 },
+      "maxPerSession": 5,
+      "description": "Mostly reading; Suggested = near zero"
+    },
+    "Sleepy": {
+      "followed": { "min": 4, "max": 8 },
+      "suggested": { "min": 1, "max": 3 },
+      "maxPerSession": 6,
+      "description": "Longer dwells; few likes"
+    },
+    "Casual": {
+      "followed": { "min": 6, "max": 12 },
+      "suggested": { "min": 2, "max": 6 },
+      "maxPerSession": 10,
+      "description": "Baseline engagement"
+    },
+    "DayDrift": {
+      "followed": { "min": 6, "max": 12 },
+      "suggested": { "min": 2, "max": 6 },
+      "maxPerSession": 10,
+      "description": "Daytime baseline engagement"
+    },
+    "DeepDive": {
+      "followed": { "min": 6, "max": 10 },
+      "suggested": { "min": 2, "max": 4 },
+      "maxPerSession": 11,
+      "description": "More caption reads; not more likes"
+    },
+    "SkimLike": {
+      "followed": { "min": 10, "max": 18 },
+      "suggested": { "min": 4, "max": 10 },
+      "maxPerSession": 16,
+      "description": "Faster sampling; still streak-guarded"
+    },
+    "CreatorResearch": {
+      "followed": { "min": 5, "max": 9 },
+      "suggested": { "min": 1, "max": 3 },
+      "maxPerSession": 9,
+      "description": "More profile hops; restrained likes"
+    },
+    "SocialButterfly": {
+      "followed": { "min": 8, "max": 14 },
+      "suggested": { "min": 3, "max": 7 },
+      "maxPerSession": 12,
+      "description": "More comment opens"
+    },
+    "WeekendFrenzy": {
+      "followed": { "min": 10, "max": 18 },
+      "suggested": { "min": 4, "max": 9 },
+      "maxPerSession": 14,
+      "description": "Slightly higher energy; still capped"
+    }
+  },
+  "globalGates": {
+    "minDwellMs": 1200,
+    "antiStreakMax": 2,
+    "antiStreakFreeze": 4,
+    "postLikeCooldown": 0.8,
+    "firstLapCaution": 0.5,
+    "familiarityBump": 1.2,
+    "captionExpandedBump": 0.02,
+    "adLikeRate": 0.0
+  },
+  "decay": {
+    "successDecay": 0.86,
+    "scarcityScaler": 0.7,
+    "scarcityClampToLow": true
+  },
+  "riskTiers": {
+    "NewCold": {
+      "ageDays": 30,
+      "likeScalar": 0.6,
+      "dailyFence": 60,
+      "description": "age < 30d or recent block"
+    },
+    "Warming": {
+      "ageDays": 90,
+      "likeScalar": 0.85,
+      "dailyFence": 120,
+      "description": "1-6 mo, clean 7d"
+    },
+    "Seasoned": {
+      "ageDays": 180,
+      "likeScalar": 1.0,
+      "dailyFence": 200,
+      "description": ">6 mo, clean"
+    }
+  },
+  "sessionShapes": {
+    "MicroCheck": { "likeMultiplier": 0.1, "maxDuration": 60 },
+    "CasualSkim": { "likeMultiplier": 1.0, "maxDuration": 480 },
+    "DeepRead": { "likeMultiplier": 0.9, "maxDuration": 720 },
+    "SkimBounce": { "likeMultiplier": 1.2, "maxDuration": 300 },
+    "CreatorResearch": { "likeMultiplier": 0.8, "maxDuration": 540 },
+    "SocialButterfly": { "likeMultiplier": 1.1, "maxDuration": 480 },
+    "Sleepy": { "likeMultiplier": 0.7, "maxDuration": 420 }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "sessionGating": {
+    "minGapMinutes": { "min": 60, "max": 210 },
+    "microCheckWindow": { "min": 5, "max": 15 },
+    "freshnessGate": {
+      "minNewPosts": 3,
+      "warmupSeconds": 15,
+      "maxWarmupSeconds": 20,
+      "sameAccountThreshold": 2
+    },
+    "fatigueThreshold": 0.6,
+    "fatigueDowngradeShapes": ["MicroCheck", "SkimBounce"]
+  },
+  "daypartWeights": {
+    "Morning": {
+      "timeRange": "07:00-11:00",
+      "shapes": { "MicroCheck": 0.4, "CasualSkim": 0.4, "DeepRead": 0.2 }
+    },
+    "Afternoon": {
+      "timeRange": "12:00-17:00",
+      "shapes": { "MicroCheck": 0.2, "CasualSkim": 0.5, "SkimBounce": 0.15, "CreatorResearch": 0.15 }
+    },
+    "Evening": {
+      "timeRange": "18:00-23:00",
+      "shapes": { "MicroCheck": 0.1, "CasualSkim": 0.35, "DeepRead": 0.35, "SocialButterfly": 0.2 }
+    },
+    "LateNight": {
+      "timeRange": "23:00-02:00",
+      "shapes": { "Sleepy": 0.4, "SkimBounce": 0.3, "MicroCheck": 0.3 }
+    }
+  },
+  "noOpRealism": {
+    "microCheckExitRate": 0.15,
+    "freshnessBailRate": 0.2,
+    "totalNoOpRate": 0.18
+  },
+  "dailyBudgeting": {
+    "maxSessionsPerDay": 6,
+    "minSessionsPerDay": 2,
+    "actualSessionsPerDay": { "min": 2, "max": 4 },
+    "budgetThreshold": 0.1,
+    "earlyStopThreshold": 0.9
+  },
+  "crossSessionMemory": {
+    "lastSeenIdsBuffer": 60,
+    "likeWindowSize": 5,
+    "familiarAccountsHours": 72,
+    "scarcityObservationsSessions": 3,
+    "entryVariation": {
+      "notificationsGlance": 0.3,
+      "followingPeek": 0.15,
+      "directHome": 0.55
+    }
+  },
+  "scarcityBehavior": {
+    "sessionCapMinutes": { "min": 2, "max": 6 },
+    "deepReadException": true,
+    "suggestedLikeReduction": { "min": 0.3, "max": 0.6 },
+    "followingFeedDetour": 0.2,
+    "followingFeedDuration": { "min": 45, "max": 90 }
+  },
+  "naturalExits": {
+    "caughtUpExit": true,
+    "capReachedExit": true,
+    "contentStallExit": true,
+    "boredomExit": true,
+    "spinnerTimeout": 4000,
+    "suggestedStreakMax": 3
+  },
+  "telemetry": {
+    "logPerPost": true,
+    "requiredFields": [
+      "post_idx", "source", "dwell_ms", "intent", "like_attempted", 
+      "like_success", "likeP_before", "likeP_after", "reason_blocked", 
+      "mood", "shape", "scarcity", "riskTier"
+    ],
+    "dashboardMetrics": [
+      "likes_per_100_posts", "ad_like_rate", "streak_monitor", "session_variance"
+    ]
+  }
+}

@@ -2,77 +2,87 @@
   {
     "profileId": "k12im9s2",
     "pod": "podA",
-    "nextEligibleAt": "2025-09-08T21:01:36.905Z",
+    "nextEligibleAt": "2025-09-14T19:08:25.511Z",
     "lastActiveAt": null,
     "startsToday": 0,
     "energy": 100,
     "flags": {
       "running": false,
-      "needsRecovery": false
+      "needsRecovery": false,
+      "paused": false
     },
     "errorStreak": 0,
     "mood": "Sleep",
-    "daypart": "Sleep"
+    "daypart": "Sleep",
+    "pausedUntil": null
   },
   {
     "profileId": "k12im9ry",
     "pod": "podA",
-    "nextEligibleAt": "2025-09-08T21:01:36.905Z",
+    "nextEligibleAt": "2025-09-14T19:08:25.511Z",
     "lastActiveAt": null,
     "startsToday": 0,
     "energy": 100,
     "flags": {
       "running": false,
-      "needsRecovery": false
+      "needsRecovery": false,
+      "paused": false
     },
     "errorStreak": 0,
     "mood": "Sleep",
-    "daypart": "Sleep"
+    "daypart": "Sleep",
+    "pausedUntil": null
   },
   {
     "profileId": "k12im9s3",
     "pod": "podA",
-    "nextEligibleAt": "2025-09-08T21:01:36.905Z",
+    "nextEligibleAt": "2025-09-14T19:08:25.511Z",
     "lastActiveAt": null,
     "startsToday": 0,
     "energy": 100,
     "flags": {
       "running": false,
-      "needsRecovery": false
+      "needsRecovery": false,
+      "paused": false
     },
     "errorStreak": 0,
     "mood": "Sleep",
-    "daypart": "Sleep"
+    "daypart": "Sleep",
+    "pausedUntil": null
   },
   {
     "profileId": "k12im9s4",
     "pod": "podA",
-    "nextEligibleAt": "2025-09-08T21:01:36.905Z",
+    "nextEligibleAt": "2025-09-14T19:08:25.511Z",
     "lastActiveAt": null,
     "startsToday": 0,
     "energy": 100,
     "flags": {
       "running": false,
-      "needsRecovery": false
+      "needsRecovery": false,
+      "paused": false
     },
     "errorStreak": 0,
     "mood": "Sleep",
-    "daypart": "Sleep"
+    "daypart": "Sleep",
+    "pausedUntil": null
   },
   {
     "profileId": "k12im9s5",
     "pod": "podA",
-    "nextEligibleAt": "2025-09-08T21:01:36.905Z",
+    "nextEligibleAt": "2025-09-14T19:08:25.511Z",
     "lastActiveAt": null,
     "startsToday": 0,
     "energy": 100,
     "flags": {
       "running": false,
-      "needsRecovery": false
+      "needsRecovery": false,
+      "paused": false
     },
     "errorStreak": 0,
     "mood": "Sleep",
-    "daypart": "Sleep"
+    "daypart": "Sleep",
+    "pausedUntil": null
   },
   {
     "profileId": "testProfile123",

@@ -1,0 +1,86 @@
+{
+  "MicroCheck": {
+    "duration": { "min": 10, "max": 60 },
+    "actions": {
+      "pullRefresh": 0.15,
+      "scanPosts": 4,
+      "likes": 0,
+      "commentOpens": 0,
+      "profileHops": 0
+    },
+    "exitConditions": ["freshnessGate", "noNewContent", "timeLimit"],
+    "description": "Quick check for new content, minimal engagement"
+  },
+  "CasualSkim": {
+    "duration": { "min": 180, "max": 480 },
+    "actions": {
+      "likes": 6,
+      "commentOpens": 2,
+      "profileHops": 1,
+      "captionExpansions": 1,
+      "saves": 0
+    },
+    "exitConditions": ["caughtUp", "timeLimit", "capReached"],
+    "description": "Standard home scroll with modest engagement"
+  },
+  "DeepRead": {
+    "duration": { "min": 360, "max": 720 },
+    "actions": {
+      "likes": 8,
+      "captionExpansions": 3,
+      "commentOpens": 4,
+      "profileHops": 2,
+      "saves": 1
+    },
+    "exitConditions": ["caughtUp", "timeLimit", "capReached"],
+    "description": "Slower, more thoughtful engagement with content"
+  },
+  "SkimBounce": {
+    "duration": { "min": 120, "max": 300 },
+    "actions": {
+      "likes": 2,
+      "fastFlicks": true,
+      "commentOpens": 0,
+      "profileHops": 0,
+      "captionExpansions": 0
+    },
+    "exitConditions": ["caughtUp", "earlyExit", "timeLimit"],
+    "description": "Fast scrolling with minimal engagement"
+  },
+  "CreatorResearch": {
+    "duration": { "min": 240, "max": 540 },
+    "actions": {
+      "likes": 5,
+      "profileHops": 3,
+      "saves": 1,
+      "commentOpens": 2,
+      "captionExpansions": 2
+    },
+    "exitConditions": ["timeLimit", "researchComplete", "capReached"],
+    "description": "More profile exploration, fewer likes"
+  },
+  "SocialButterfly": {
+    "duration": { "min": 180, "max": 480 },
+    "actions": {
+      "likes": 10,
+      "commentOpens": 5,
+      "profileHops": 2,
+      "captionExpansions": 2,
+      "saves": 0
+    },
+    "exitConditions": ["caughtUp", "timeLimit", "capReached"],
+    "description": "Casual skim with more comment engagement"
+  },
+  "Sleepy": {
+    "duration": { "min": 240, "max": 420 },
+    "actions": {
+      "likes": 4,
+      "longerDwells": true,
+      "commentOpens": 1,
+      "profileHops": 1,
+      "captionExpansions": 1
+    },
+    "exitConditions": ["caughtUp", "timeLimit", "fatigue"],
+    "description": "Late night variant with longer dwells, fewer likes"
+  }
+}

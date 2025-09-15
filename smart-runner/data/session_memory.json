@@ -1,0 +1,422 @@
+{
+  "profiles": {
+    "undefined": {
+      "lastSeenIds": [],
+      "likeWindow": [],
+      "lastSession": null,
+      "familiarAccounts": [],
+      "scarcityObservations": [],
+      "entryVariations": [],
+      "createdAt": "2025-09-14T19:59:57.991Z",
+      "lastUpdated": "2025-09-14T19:59:57.991Z"
+    },
+    "integration_test_profile": {
+      "lastSeenIds": [],
+      "likeWindow": [],
+      "lastSession": {
+        "shape": "MicroCheck",
+        "mood": "Casual",
+        "startTs": "2025-09-14T23:15:29.725Z",
+        "endTs": "2025-09-14T23:15:29.725Z",
+        "likes": 5,
+        "reasonEnded": "timeLimit",
+        "duration": 11037.328783814739,
+        "scarcity": false,
+        "riskTier": "Seasoned"
+      },
+      "familiarAccounts": [],
+      "scarcityObservations": [],
+      "entryVariations": [],
+      "createdAt": "2025-09-14T19:59:57.994Z",
+      "lastUpdated": "2025-09-14T23:15:29.726Z",
+      "dailyCounters": {
+        "Mon Sep 15 2025": {
+          "sessions": 8,
+          "likes": 40,
+          "comments": 16,
+          "profileHops": 8,
+          "saves": 0
+        }
+      }
+    },
+    "memory_test_profile": {
+      "lastSeenIds": [],
+      "likeWindow": [
+        {
+          "postId": "post_1_3",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:00:06.291Z"
+        },
+        {
+          "postId": "post_1_4",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:00:06.291Z"
+        },
+        {
+          "postId": "post_1_5",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:00:06.291Z"
+        },
+        {
+          "postId": "post_2_0",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:00:06.291Z"
+        },
+        {
+          "postId": "post_2_1",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:00:06.291Z"
+        }
+      ],
+      "likeToday": 0,
+      "lastSession": {
+        "shape": "MicroCheck",
+        "mood": "DoNotDisturb",
+        "startTs": "2025-09-14T22:00:06.291Z",
+        "endTs": "2025-09-14T23:00:06.291Z",
+        "likes": 2,
+        "reasonEnded": "timeLimit",
+        "duration": 300000,
+        "scarcity": false,
+        "riskTier": "Seasoned"
+      },
+      "familiarAccounts": [
+        {
+          "username": "user_0",
+          "interactionType": "like",
+          "timestamp": "2025-09-14T23:00:06.291Z"
+        },
+        {
+          "username": "user_1",
+          "interactionType": "like",
+          "timestamp": "2025-09-14T23:00:06.291Z"
+        },
+        {
+          "username": "user_2",
+          "interactionType": "like",
+          "timestamp": "2025-09-14T23:00:06.291Z"
+        }
+      ],
+      "scarcityObservations": [],
+      "dailyCounters": {
+        "sessions": 0,
+        "likes": 0,
+        "comments": 0,
+        "profileHops": 0,
+        "Mon Sep 15 2025": {
+          "sessions": 6,
+          "likes": 16,
+          "comments": 3,
+          "profileHops": 2,
+          "saves": 0
+        }
+      },
+      "entryVariations": [],
+      "lastUpdated": "2025-09-14T23:00:06.291Z"
+    },
+    "memory_test_profile_1757891107957": {
+      "lastSeenIds": [],
+      "likeWindow": [
+        {
+          "postId": "post_1_3",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:05:07.958Z"
+        },
+        {
+          "postId": "post_1_4",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:05:07.958Z"
+        },
+        {
+          "postId": "post_1_5",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:05:07.958Z"
+        },
+        {
+          "postId": "post_2_0",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:05:07.958Z"
+        },
+        {
+          "postId": "post_2_1",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:05:07.958Z"
+        }
+      ],
+      "likeToday": 0,
+      "lastSession": {
+        "shape": "MicroCheck",
+        "mood": "DoNotDisturb",
+        "startTs": "2025-09-14T22:05:07.958Z",
+        "endTs": "2025-09-14T23:05:07.958Z",
+        "likes": 2,
+        "reasonEnded": "timeLimit",
+        "duration": 300000,
+        "scarcity": false,
+        "riskTier": "Seasoned"
+      },
+      "familiarAccounts": [
+        {
+          "username": "user_0",
+          "interactionType": "like",
+          "timestamp": "2025-09-14T23:05:07.958Z"
+        },
+        {
+          "username": "user_1",
+          "interactionType": "like",
+          "timestamp": "2025-09-14T23:05:07.958Z"
+        },
+        {
+          "username": "user_2",
+          "interactionType": "like",
+          "timestamp": "2025-09-14T23:05:07.958Z"
+        }
+      ],
+      "scarcityObservations": [],
+      "dailyCounters": {
+        "sessions": 0,
+        "likes": 0,
+        "comments": 0,
+        "profileHops": 0,
+        "Mon Sep 15 2025": {
+          "sessions": 6,
+          "likes": 16,
+          "comments": 3,
+          "profileHops": 2,
+          "saves": 0
+        }
+      },
+      "entryVariations": [],
+      "lastUpdated": "2025-09-14T23:05:07.958Z"
+    },
+    "memory_test_profile_1757891354548": {
+      "lastSeenIds": [],
+      "likeWindow": [
+        {
+          "postId": "post_1_3",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:09:14.549Z"
+        },
+        {
+          "postId": "post_1_4",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:09:14.549Z"
+        },
+        {
+          "postId": "post_1_5",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:09:14.549Z"
+        },
+        {
+          "postId": "post_2_0",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:09:14.549Z"
+        },
+        {
+          "postId": "post_2_1",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:09:14.549Z"
+        }
+      ],
+      "likeToday": 0,
+      "lastSession": {
+        "shape": "MicroCheck",
+        "mood": "DoNotDisturb",
+        "startTs": "2025-09-14T22:09:14.549Z",
+        "endTs": "2025-09-14T23:09:14.549Z",
+        "likes": 2,
+        "reasonEnded": "timeLimit",
+        "duration": 300000,
+        "scarcity": false,
+        "riskTier": "Seasoned"
+      },
+      "familiarAccounts": [
+        {
+          "username": "user_0",
+          "interactionType": "like",
+          "timestamp": "2025-09-14T23:09:14.549Z"
+        },
+        {
+          "username": "user_1",
+          "interactionType": "like",
+          "timestamp": "2025-09-14T23:09:14.549Z"
+        },
+        {
+          "username": "user_2",
+          "interactionType": "like",
+          "timestamp": "2025-09-14T23:09:14.549Z"
+        }
+      ],
+      "scarcityObservations": [],
+      "dailyCounters": {
+        "sessions": 0,
+        "likes": 0,
+        "comments": 0,
+        "profileHops": 0,
+        "Mon Sep 15 2025": {
+          "sessions": 3,
+          "likes": 16,
+          "comments": 3,
+          "profileHops": 2,
+          "saves": 0
+        }
+      },
+      "entryVariations": [],
+      "lastUpdated": "2025-09-14T23:09:14.549Z"
+    },
+    "memory_test_profile_1757891626700": {
+      "lastSeenIds": [],
+      "likeWindow": [
+        {
+          "postId": "post_1_3",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:13:46.702Z"
+        },
+        {
+          "postId": "post_1_4",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:13:46.702Z"
+        },
+        {
+          "postId": "post_1_5",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:13:46.702Z"
+        },
+        {
+          "postId": "post_2_0",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:13:46.703Z"
+        },
+        {
+          "postId": "post_2_1",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:13:46.703Z"
+        }
+      ],
+      "likeToday": 0,
+      "lastSession": {
+        "shape": "MicroCheck",
+        "mood": "DoNotDisturb",
+        "startTs": "2025-09-14T22:13:46.703Z",
+        "endTs": "2025-09-14T23:13:46.703Z",
+        "likes": 2,
+        "reasonEnded": "timeLimit",
+        "duration": 300000,
+        "scarcity": false,
+        "riskTier": "Seasoned"
+      },
+      "familiarAccounts": [
+        {
+          "username": "user_0",
+          "interactionType": "like",
+          "timestamp": "2025-09-14T23:13:46.701Z"
+        },
+        {
+          "username": "user_1",
+          "interactionType": "like",
+          "timestamp": "2025-09-14T23:13:46.702Z"
+        },
+        {
+          "username": "user_2",
+          "interactionType": "like",
+          "timestamp": "2025-09-14T23:13:46.703Z"
+        }
+      ],
+      "scarcityObservations": [],
+      "dailyCounters": {
+        "sessions": 0,
+        "likes": 0,
+        "comments": 0,
+        "profileHops": 0,
+        "Mon Sep 15 2025": {
+          "sessions": 3,
+          "likes": 16,
+          "comments": 3,
+          "profileHops": 2,
+          "saves": 0
+        }
+      },
+      "entryVariations": [],
+      "lastUpdated": "2025-09-14T23:13:46.703Z"
+    },
+    "memory_test_profile_1757891729728": {
+      "lastSeenIds": [],
+      "likeWindow": [
+        {
+          "postId": "post_1_3",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:15:29.729Z"
+        },
+        {
+          "postId": "post_1_4",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:15:29.729Z"
+        },
+        {
+          "postId": "post_1_5",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:15:29.729Z"
+        },
+        {
+          "postId": "post_2_0",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:15:29.729Z"
+        },
+        {
+          "postId": "post_2_1",
+          "contentType": "followed",
+          "timestamp": "2025-09-14T23:15:29.729Z"
+        }
+      ],
+      "likeToday": 0,
+      "lastSession": {
+        "shape": "MicroCheck",
+        "mood": "DoNotDisturb",
+        "startTs": "2025-09-14T22:15:29.729Z",
+        "endTs": "2025-09-14T23:15:29.729Z",
+        "likes": 2,
+        "reasonEnded": "timeLimit",
+        "duration": 300000,
+        "scarcity": false,
+        "riskTier": "Seasoned"
+      },
+      "familiarAccounts": [
+        {
+          "username": "user_0",
+          "interactionType": "like",
+          "timestamp": "2025-09-14T23:15:29.729Z"
+        },
+        {
+          "username": "user_1",
+          "interactionType": "like",
+          "timestamp": "2025-09-14T23:15:29.729Z"
+        },
+        {
+          "username": "user_2",
+          "interactionType": "like",
+          "timestamp": "2025-09-14T23:15:29.729Z"
+        }
+      ],
+      "scarcityObservations": [],
+      "dailyCounters": {
+        "sessions": 0,
+        "likes": 0,
+        "comments": 0,
+        "profileHops": 0,
+        "Mon Sep 15 2025": {
+          "sessions": 3,
+          "likes": 16,
+          "comments": 3,
+          "profileHops": 2,
+          "saves": 0
+        }
+      },
+      "entryVariations": [],
+      "lastUpdated": "2025-09-14T23:15:29.729Z"
+    }
+  },
+  "global": {
+    "lastUpdate": "2025-09-14T23:15:29.729Z",
+    "version": "1.0"
+  }
+}

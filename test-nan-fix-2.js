@@ -96,7 +96,7 @@ function mockGetSafeTapZones(problematicElements, viewport) {
       // Ultimate fallback: use a small corner zone
       fallbackZone.x1 = width * 0.85;
       fallbackZone.y1 = height * 0.4;
-      fallbackZone.x2 = width * 0.95;
+      fallbackZone.x2 = width * 0.95; 
       fallbackZone.y2 = height * 0.6;
     }
     

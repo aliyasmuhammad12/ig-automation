@@ -5,6 +5,11 @@ const fs = require('fs').promises;
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
+// Import new modules
+const DailySessionOrchestrator = require('./modules/DailySessionOrchestrator');
+const HomeFeedScroller = require('./modules/HomeFeedScroller');
+const SessionMemory = require('./modules/SessionMemory');
+
 class SmartRunner {
   constructor(podName) {
     this.podName = podName;
@@ -16,6 +21,11 @@ class SmartRunner {
     this.isRunning = false;
     this.tickInterval = null;
     this.currentSession = null;
+    
+    // New orchestrator components
+    this.orchestrator = null;
+    this.homeFeedScroller = null;
+    this.sessionMemory = null;
   }
 
   async initialize() {
@@ -38,6 +48,9 @@ class SmartRunner {
 
       // Initialize database collections
       await this.initializeDatabase();
+
+      // Initialize new orchestrator components
+      await this.initializeOrchestrator();
 
       // Clear stale running flags
       await this.clearStaleFlags();
@@ -65,6 +78,29 @@ class SmartRunner {
       } catch {
         await fs.writeFile(filePath, '[]', 'utf8');
       }
+    }
+  }
+
+  async initializeOrchestrator() {
+    try {
+      const configPath = path.join(__dirname, 'config');
+      const dataPath = path.join(__dirname, 'data');
+      
+      // Initialize orchestrator components
+      this.orchestrator = new DailySessionOrchestrator(configPath);
+      this.homeFeedScroller = new HomeFeedScroller(configPath, dataPath);
+      this.sessionMemory = new SessionMemory(dataPath);
+      
+      await Promise.all([
+        this.orchestrator.initialize(),
+        this.homeFeedScroller.initialize(),
+        this.sessionMemory.initialize()
+      ]);
+      
+      console.log('🎯 Daily Session Orchestrator components initialized');
+    } catch (error) {
+      console.error('❌ Failed to initialize orchestrator components:', error.message);
+      throw error;
     }
   }
 
@@ -278,6 +314,21 @@ class SmartRunner {
     const baseWeights = this.config.weights.base;
     const moodMultipliers = this.moods[mood].weightMultipliers;
 
+    // Home Feed (new primary activity with orchestrator)
+    if (this.shouldIncludeHomeFeed(state, mood)) {
+      const homeFeedWeight = baseWeights.homefeed || 0.6; // Default weight if not configured
+      const adjustedWeight = homeFeedWeight * (moodMultipliers.homefeed || 1.0);
+      candidates.push({
+        type: 'homefeed',
+        weight: adjustedWeight,
+        params: { 
+          useOrchestrator: true,
+          mood: mood,
+          daypart: daypart
+        }
+      });
+    }
+
     // Follow
     if (await this.hasTargets(profileId, 'follow')) {
       const weight = baseWeights.follow * moodMultipliers.follow;
@@ -298,7 +349,7 @@ class SmartRunner {
       });
     }
 
-    // Reels (primary activity)
+    // Reels (secondary activity)
     const reelsWeight = baseWeights.reels * moodMultipliers.reels;
     candidates.push({
       type: 'reels',
@@ -318,6 +369,32 @@ class SmartRunner {
     }
 
     return candidates;
+  }
+
+  shouldIncludeHomeFeed(state, mood) {
+    // Check if orchestrator is available
+    if (!this.orchestrator) {
+      return false;
+    }
+    
+    // Check daily budget constraints
+    const dailyCounters = this.sessionMemory.getDailyCounters(state.profileId);
+    const maxSessionsPerDay = 6; // From orchestrator config
+    if (dailyCounters.sessions >= maxSessionsPerDay) {
+      return false;
+    }
+    
+    // Check if homefeed was run very recently
+    if (state.homefeedLastAt) {
+      const lastHomefeed = new Date(state.homefeedLastAt);
+      const now = new Date();
+      const timeSinceHomefeed = now - lastHomefeed;
+      if (timeSinceHomefeed < 60 * 60 * 1000) { // 60 minutes
+        return false;
+      }
+    }
+    
+    return true;
   }
 
   shouldIncludeUnfollow(state) {
@@ -389,7 +466,7 @@ class SmartRunner {
     this.globalSemaphore = 0; // Acquire semaphore
     
     const sessionId = uuidv4();
-    this.currentSession = { profileId, sessionId, plan };
+    this.currentSession = { profileId, sessionId, plan, startTime: Date.now() };
     
     // Update state
     await this.updateRunnerState(profileId, {
@@ -399,17 +476,79 @@ class SmartRunner {
     // Log session start
     await this.logEvent(profileId, 'start', plan.type, plan.params, sessionId);
 
-    // Start child process
-    const childProcess = this.spawnChildProcess(plan.type, profileId, plan.params);
-    
-    childProcess.on('close', async (code) => {
-      await this.handleSessionEnd(profileId, sessionId, code);
-    });
+    // Handle homefeed sessions with orchestrator
+    if (plan.type === 'homefeed' && plan.params.useOrchestrator) {
+      await this.startHomeFeedSession(profileId, plan, sessionId);
+    } else {
+      // Start child process for other activities
+      const childProcess = this.spawnChildProcess(plan.type, profileId, plan.params);
+      
+      childProcess.on('close', async (code) => {
+        await this.handleSessionEnd(profileId, sessionId, code);
+      });
 
-    childProcess.on('error', async (error) => {
-      console.error(`❌ Child process error for ${profileId}:`, error);
+      childProcess.on('error', async (error) => {
+        console.error(`❌ Child process error for ${profileId}:`, error);
+        await this.handleSessionError(profileId, sessionId, error);
+      });
+    }
+  }
+
+  async startHomeFeedSession(profileId, plan, sessionId) {
+    try {
+      console.log(`🏠 Starting homefeed session with orchestrator for ${profileId}`);
+      
+      // Get current state
+      const state = await this.getRunnerState(profileId);
+      
+      // Check if session should run using orchestrator
+      const shouldRun = await this.orchestrator.shouldRunSession(profileId, state, this.sessionMemory);
+      
+      if (!shouldRun.shouldRun) {
+        console.log(`⏭️  Homefeed session skipped: ${shouldRun.reason}`);
+        await this.logEvent(profileId, 'skip', 'homefeed', { skipReason: shouldRun.reason }, sessionId);
+        await this.handleSessionEnd(profileId, sessionId, 0);
+        return;
+      }
+      
+      // Select session shape
+      const shapeSelection = this.orchestrator.selectSessionShape(profileId, state, this.sessionMemory);
+      
+      // Calculate session parameters
+      const sessionParams = this.orchestrator.calculateSessionParams(
+        shapeSelection.shape,
+        plan.params.mood,
+        state,
+        this.sessionMemory
+      );
+      
+      console.log(`🎭 Selected session shape: ${shapeSelection.shape} (${shapeSelection.reason})`);
+      console.log(`📊 Session parameters:`, sessionParams);
+      
+      // Start child process for homefeed script
+      const childProcess = this.spawnChildProcess('homefeed', profileId, {
+        ...plan.params,
+        sessionParams: sessionParams,
+        orchestratorData: {
+          shape: shapeSelection.shape,
+          reason: shapeSelection.reason,
+          freshnessCheck: shouldRun.freshnessCheck
+        }
+      });
+      
+      childProcess.on('close', async (code) => {
+        await this.handleSessionEnd(profileId, sessionId, code);
+      });
+
+      childProcess.on('error', async (error) => {
+        console.error(`❌ Homefeed session error for ${profileId}:`, error);
+        await this.handleSessionError(profileId, sessionId, error);
+      });
+      
+    } catch (error) {
+      console.error(`❌ Failed to start homefeed session for ${profileId}:`, error.message);
       await this.handleSessionError(profileId, sessionId, error);
-    });
+    }
   }
 
   spawnChildProcess(type, profileId, params) {
@@ -418,6 +557,7 @@ class SmartRunner {
       'unfollow': 'unfollow.js',
       'reels': 'humanize/run.js',
       'stories': 'humanize/runStories.js',
+      'homefeed': 'humanize/runHomeFeed.js',
       'simulate-failure': 'smart-runner/simulate-failure.js'
     };
 
@@ -470,10 +610,14 @@ class SmartRunner {
         errorStreak: 0
       });
       
-      // Update stories timestamp if it was a stories session
+      // Update activity timestamps
       if (this.currentSession?.plan?.type === 'stories') {
         await this.updateRunnerState(profileId, {
           storiesLastAt: new Date().toISOString()
+        });
+      } else if (this.currentSession?.plan?.type === 'homefeed') {
+        await this.updateRunnerState(profileId, {
+          homefeedLastAt: new Date().toISOString()
         });
       }
     } else {

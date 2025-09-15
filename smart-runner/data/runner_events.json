@@ -3768,5 +3768,330 @@
     },
     "outcome": null,
     "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:07:50.175Z",
+    "pod": "podA",
+    "profileId": "k12im9s2",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:07:50.180Z",
+    "pod": "podA",
+    "profileId": "k12im9ry",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:07:50.184Z",
+    "pod": "podA",
+    "profileId": "k12im9s3",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:07:50.187Z",
+    "pod": "podA",
+    "profileId": "k12im9s4",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:07:50.192Z",
+    "pod": "podA",
+    "profileId": "k12im9s5",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:09:50.189Z",
+    "pod": "podA",
+    "profileId": "k12im9s2",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:09:50.202Z",
+    "pod": "podA",
+    "profileId": "k12im9ry",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:09:50.212Z",
+    "pod": "podA",
+    "profileId": "k12im9s3",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:09:50.221Z",
+    "pod": "podA",
+    "profileId": "k12im9s4",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:09:50.231Z",
+    "pod": "podA",
+    "profileId": "k12im9s5",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:11:50.197Z",
+    "pod": "podA",
+    "profileId": "k12im9s2",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:11:50.206Z",
+    "pod": "podA",
+    "profileId": "k12im9ry",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:11:50.217Z",
+    "pod": "podA",
+    "profileId": "k12im9s3",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:11:50.227Z",
+    "pod": "podA",
+    "profileId": "k12im9s4",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:11:50.237Z",
+    "pod": "podA",
+    "profileId": "k12im9s5",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:13:50.201Z",
+    "pod": "podA",
+    "profileId": "k12im9s2",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:13:50.210Z",
+    "pod": "podA",
+    "profileId": "k12im9ry",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:13:50.221Z",
+    "pod": "podA",
+    "profileId": "k12im9s3",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:13:50.233Z",
+    "pod": "podA",
+    "profileId": "k12im9s4",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:13:50.243Z",
+    "pod": "podA",
+    "profileId": "k12im9s5",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:15:50.202Z",
+    "pod": "podA",
+    "profileId": "k12im9s2",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:15:50.210Z",
+    "pod": "podA",
+    "profileId": "k12im9ry",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:15:50.220Z",
+    "pod": "podA",
+    "profileId": "k12im9s3",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:15:50.229Z",
+    "pod": "podA",
+    "profileId": "k12im9s4",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
+  },
+  {
+    "ts": "2025-09-14T19:15:50.241Z",
+    "pod": "podA",
+    "profileId": "k12im9s5",
+    "sessionId": null,
+    "event": "skip",
+    "type": "idle",
+    "params": {
+      "skipReason": "sleepWindow"
+    },
+    "outcome": null,
+    "durMs": null
   }
 ]

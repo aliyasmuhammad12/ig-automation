@@ -1,0 +1,50 @@
+{
+  "detection": {
+    "followedSelectors": [
+      "[data-testid='post']",
+      "article[role='presentation']",
+      "div[role='presentation']"
+    ],
+    "suggestedSelectors": [
+      "[aria-label*='Suggested']",
+      "[data-testid='suggested']",
+      "[aria-label*='suggested']",
+      "div[aria-label*='Suggested for you']"
+    ],
+    "adSelectors": [
+      "[aria-label*='Sponsored']",
+      "[data-testid='ad']",
+      "[aria-label*='Advertisement']",
+      "div[aria-label*='Sponsored']"
+    ],
+    "caughtUpSelectors": [
+      "[aria-label*='caught up']",
+      "[data-testid='caught-up']",
+      "[aria-label*='You're all caught up']",
+      "div[aria-label*='You're all caught up']"
+    ],
+    "followingFeedSelectors": [
+      "[aria-label*='Following']",
+      "[data-testid='following-feed']",
+      "a[href*='/following/']"
+    ]
+  },
+  "scarcityThresholds": {
+    "followedMin": 0.4,
+    "suggestedMax": 0.5,
+    "scanPosts": 20,
+    "minPostsForAnalysis": 15
+  },
+  "contentAnalysis": {
+    "maxScanTime": 30000,
+    "postDetectionTimeout": 5000,
+    "refreshTimeout": 10000,
+    "scrollDelay": 1000
+  },
+  "exitConditions": {
+    "caughtUpExit": true,
+    "suggestedStreakMax": 3,
+    "contentStallTimeout": 4000,
+    "spinnerDetection": true
+  }
+}

@@ -20,6 +20,7 @@
   },
   "weights": {
     "base": {
+      "homefeed": 0.60,
       "follow": 0.35,
       "unfollow": 0.20,
       "reels": 0.80,
